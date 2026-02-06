@@ -1,20 +1,53 @@
-from fastapi import FastAPI
-from . import models, database, schemas
+from fastapi import FastAPI, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+from . import models, schemas, database, security
 
 # Pravimo tabele(ako ne postoje)
 models.Base.metadata.create_all(bind=database.engine)
 
-app = FastAPI()
+app = FastAPI(title="Voting Dapp API")
 
 @app.get("/")
-def read_root():
-    return {"message": "Tabele su uspesno kreirane!"}
+def home():
+    return {"status": "online", "message": "Voting Dapp Backend is running"}
 
-# Proveravamo da li FastAPI vidi semu
-@app.post("/test-login", response_model=schemas.Token)
-def test_login(data: schemas.UserLogin):
-    return {
-        "access_token": "lazni_token_za_test",
-        "token_type": "bearer",
-        "user_role": "user"
-    }
+@app.post("/login", response_model=schemas.Token)
+def login(login_data: schemas.UserLogin, db: Session = Depends(database.get_db)):
+    try:
+        # Provera MetaMask potpisa
+        is_valid = security.verify_signature(login_data.wallet_address, login_data.signature)
+        
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid signature"
+            )
+
+        # Provera da li korisnik već postoji u bazi
+        user = db.query(models.User).filter(func.lower(models.User.wallet_address) == login_data.wallet_address.lower()).first()
+
+        # Ako ne postoji, kreira se (Automatska registracija)
+        if not user:
+            user = models.User(
+                wallet_address=login_data.wallet_address.lower(),
+                role=models.UserRole.USER # Svaki novi je običan korisnik
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        # Generisanje JWT tokena
+        access_token = security.create_access_token(
+            data={"sub": user.wallet_address, "role": user.role.value}
+        )
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user_role": user.role
+        }
+    except Exception as e:
+        # Ovo nam služi da vidimo grešku (ako pukne)
+        print(f"Greška: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

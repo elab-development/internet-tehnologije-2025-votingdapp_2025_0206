@@ -68,7 +68,7 @@ class Topic(Base):
     
     # Relacije
     group = relationship("Group", back_populates="topics")
-    votes = relationship("Vote", back_populates="topic")
+    votes = relationship("Vote", back_populates="topic", cascade="all, delete-orphan")
 
 # Glas
 class Vote(Base):
@@ -76,8 +76,8 @@ class Vote(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     choice = Column(Enum(VoteOption), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    topic = Column(Integer, ForeignKey("topics.id"))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    topic_id = Column(Integer, ForeignKey("topics.id"), nullable=False)
 
     # Relacije
     user = relationship("User", back_populates="votes")
