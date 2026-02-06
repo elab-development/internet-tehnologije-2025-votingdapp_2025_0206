@@ -2,11 +2,21 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from . import models, schemas, database, security
+from fastapi.middleware.cors import CORSMiddleware
 
 # Pravimo tabele(ako ne postoje)
 models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI(title="Voting Dapp API")
+
+# Dodavanje CORS-a (Cross-Origin Resource Sharing)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def home():
