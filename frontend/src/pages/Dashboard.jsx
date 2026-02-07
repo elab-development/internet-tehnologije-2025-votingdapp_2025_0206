@@ -85,6 +85,23 @@ function Dashboard() {
                 <div className="col-span-5 font-medium text-gray-800">
                     {t.title}
                     <p className="text-xs text-gray-500 font-normal">{t.description}</p>
+                    {/*Ovde ubacujemo rezultate od glasanja*/}
+                    {t.results && (
+                      <div className="flex gap-4 mt-2 text-[10px] font-bold uppercase tracking-wider">
+                        <div className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                          <span className="text-green-600">ZA: {t.results.yes}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                          <span className="text-red-600">PROTIV: {t.results.no}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
+                          <span className="text-gray-500">UZDRŽANO: {t.results.abstain}</span>
+                        </div>
+                      </div>
+                    )}
                 </div>
                 
                 <div className="col-span-2 text-center">

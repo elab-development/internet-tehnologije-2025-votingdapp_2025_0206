@@ -147,7 +147,50 @@ function Home() {
                     </span>
                   </div>
                   <p className="text-gray-600 mt-2">{topic.description}</p>
-                  
+                  {/* VIZUELNI PRIKAZ REZULTATA */}
+                  {topic.results && (
+                    <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex justify-between text-xs font-bold text-gray-500 uppercase mb-2">
+                        <span>Trenutni rezultati</span>
+                        <span>Ukupno glasova: {topic.results.yes + topic.results.no + topic.results.abstain}</span>
+                      </div>
+
+                  {/* Progres bar koji se puni */}
+                  <div className="w-full bg-gray-200 rounded-full h-3 flex overflow-hidden mb-2">
+                    <div 
+                      style={{ width: `${(topic.results.yes / (topic.results.yes + topic.results.no + topic.results.abstain || 1)) * 100}%` }}
+                      className="bg-green-500 h-full transition-all duration-700"
+                      title="ZA"
+                    ></div>
+                    <div 
+                      style={{ width: `${(topic.results.no / (topic.results.yes + topic.results.no + topic.results.abstain || 1)) * 100}%` }}
+                      className="bg-red-500 h-full transition-all duration-700"
+                      title="PROTIV"
+                    ></div>
+                    <div 
+                      style={{ width: `${(topic.results.abstain / (topic.results.yes + topic.results.no + topic.results.abstain || 1)) * 100}%` }}
+                      className="bg-gray-400 h-full transition-all duration-700"
+                      title="UZDRŽANO"
+                    ></div>
+                  </div>
+
+                  {/* Brojevi ispod bara */}
+                  <div className="flex justify-between text-xs font-medium">
+                    <div className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                      <span className="text-green-700">ZA: {topic.results.yes}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                      <span className="text-red-700">PROTIV: {topic.results.no}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                      <span className="text-gray-600">UZDRŽANO: {topic.results.abstain}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
                   {/* Dugme za glasanje(u radu)*/}
                   {topic.status === 'active' && (
                     <div className="mt-4 flex flex-wrap gap-3">

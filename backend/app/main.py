@@ -156,23 +156,34 @@ def get_topics(
     wallet = current_user["wallet_address"].lower()
     role = current_user["role"].lower()
 
-    # Ako je ADMIN: Vrati teme iz svih grupa koje on poseduje
+    # Pronalazenje tema na osnovu uloge
     if role == "admin":
         owned_groups = db.query(models.Group).filter(models.Group.admin_wallet == wallet).all()
         group_ids = [g.id for g in owned_groups]
-        
-        # Ako admin nema nijednu grupu
         if not group_ids:
             return []
-            
-        return db.query(models.Topic).filter(models.Topic.group_id.in_(group_ids)).all()
+        topics = db.query(models.Topic).filter(models.Topic.group_id.in_(group_ids)).all()
+    else:
+        user = db.query(models.User).filter(func.lower(models.User.wallet_address) == wallet).first()
+        if not user or not user.group_id:
+            return []
+        topics = db.query(models.Topic).filter(models.Topic.group_id == user.group_id).all()
 
-    # Ako je USER: Vrati teme samo iz njegove grupe 
-    user = db.query(models.User).filter(func.lower(models.User.wallet_address) == wallet).first()
-    if not user.group_id:
-        return []
-    
-    return db.query(models.Topic).filter(models.Topic.group_id == user.group_id).all()
+    # Prebrojavanje glasova za svaku temu
+    for topic in topics:
+        yes_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == "YES").count()
+        no_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == "NO").count()
+        abstain_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == "ABSTAIN").count()
+        
+        # Pakujemo rezultate u rečnik koji schemas.Topic očekuje
+        topic.results = {
+            "yes": yes_count,
+            "no": no_count,
+            "abstain": abstain_count
+        }
+
+    return topics
+
 
 
 # Ruta za menjanje statusa teme

@@ -48,18 +48,25 @@ class TopicCreate(BaseModel):
     title: str
     description: str
 
-# Kako tema izgleda kad je vratimo Frontendu
+# Za prikazivanje rezultata
+class TopicResults(BaseModel):
+    yes: int
+    no: int
+    abstain: int
+
+# Za kreiranje tema
 class Topic(BaseModel):
     id: int
     title: str
     description: str
-    status: str  # pending, active, closed
+    status: str
     created_at: datetime
     group_id: int
+    results: Optional[TopicResults] = None 
 
     class Config:
         from_attributes = True
-
+        
 # Za kreiranje glasa
 class VoteCreate(BaseModel):
     topic_id: int
