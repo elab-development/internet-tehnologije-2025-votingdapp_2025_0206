@@ -35,4 +35,10 @@ export const createTopic = async (title, description) => {
   return apiClient.post("/topics", { title, description });
 };
 
+// Funkcija za promenu statusa teme (active ili closed)
+export const updateTopicStatus = async (topicId, status) => {
+  // status mora biti "active" ili "closed"
+  return apiClient.put(`/topics/${topicId}/${status}`);
+};
+
 export default apiClient;

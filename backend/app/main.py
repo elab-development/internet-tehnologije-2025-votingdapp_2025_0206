@@ -147,21 +147,63 @@ def create_topic(
     
     return new_topic
 
-
 # Ruta za uzimanje tema(iz jedne grupe)
 @app.get("/topics", response_model=list[schemas.Topic])
 def get_topics(
     current_user: dict = Depends(security.get_current_user),
     db: Session = Depends(database.get_db)
 ):
-    # Nađi korisnika
-    user = db.query(models.User).filter(func.lower(models.User.wallet_address) == current_user["wallet_address"].lower()).first()
+    wallet = current_user["wallet_address"].lower()
+    role = current_user["role"].lower()
 
+    # Ako je ADMIN: Vrati teme iz svih grupa koje on poseduje
+    if role == "admin":
+        owned_groups = db.query(models.Group).filter(models.Group.admin_wallet == wallet).all()
+        group_ids = [g.id for g in owned_groups]
+        
+        # Ako admin nema nijednu grupu
+        if not group_ids:
+            return []
+            
+        return db.query(models.Topic).filter(models.Topic.group_id.in_(group_ids)).all()
+
+    # Ako je USER: Vrati teme samo iz njegove grupe 
+    user = db.query(models.User).filter(func.lower(models.User.wallet_address) == wallet).first()
     if not user.group_id:
-        return [] # Ako nema grupu, nema ni tema
-
-    # Vrati samo teme koje pripadaju toj grupi
-    topics = db.query(models.Topic).filter(models.Topic.group_id == user.group_id).all()
+        return []
     
-    return topics
+    return db.query(models.Topic).filter(models.Topic.group_id == user.group_id).all()
 
+
+# Ruta za menjanje statusa teme
+@app.put("/topics/{topic_id}/{status}")
+def update_topic_status(
+    topic_id: int,
+    status: str, # "active" ili "closed"
+    current_user: dict = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    # Provera da li je Admin
+    if current_user["role"].lower() != "admin":
+        raise HTTPException(status_code=403, detail="Samo admin menja status!")
+
+    topic = db.query(models.Topic).filter(models.Topic.id == topic_id).first()
+    if not topic:
+        raise HTTPException(status_code=404, detail="Tema nije pronađena")
+
+    # Provera da li je Admin vlasnik grupe kojoj tema pripada
+    group = db.query(models.Group).filter(models.Group.id == topic.group_id).first()
+    if group.admin_wallet.lower() != current_user["wallet_address"].lower():
+        raise HTTPException(status_code=403, detail="Niste vlasnik ove grupe!")
+
+    # Azuriranje statusa
+    # Mapiramo string u Enum (active - ACTIVE, closed - CLOSED)
+    if status == "active":
+        topic.status = models.TopicStatus.ACTIVE
+    elif status == "closed":
+        topic.status = models.TopicStatus.CLOSED
+    else:
+        raise HTTPException(status_code=400, detail="Nepoznat status")
+
+    db.commit()
+    return {"message": f"Status teme promenjen u {status}"}
