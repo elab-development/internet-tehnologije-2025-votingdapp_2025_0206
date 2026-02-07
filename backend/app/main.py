@@ -22,6 +22,7 @@ app.add_middleware(
 def home():
     return {"status": "online", "message": "Voting Dapp Backend is running"}
 
+# Ruta za logovanje
 @app.post("/login", response_model=schemas.Token)
 def login(login_data: schemas.UserLogin, db: Session = Depends(database.get_db)):
     try:
@@ -48,9 +49,7 @@ def login(login_data: schemas.UserLogin, db: Session = Depends(database.get_db))
             db.refresh(user)
         
         # Generisanje JWT tokena
-        access_token = security.create_access_token(
-            data={"sub": user.wallet_address, "role": user.role.value}
-        )
+        access_token = security.create_access_token(data={"sub": user.wallet_address, "role": user.role.value})
 
         return {
             "access_token": access_token,
@@ -62,6 +61,7 @@ def login(login_data: schemas.UserLogin, db: Session = Depends(database.get_db))
         print(f"Greška: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Ruta za kreiranje grupe
 @app.post("/groups", response_model=schemas.Group)
 def create_group(
     group: schemas.GroupCreate, 
@@ -75,9 +75,7 @@ def create_group(
         raise HTTPException(status_code=403, detail="Samo admin može da pravi grupe!")
 
     # Da li grupa već postoji? (Po imenu ili šifri)
-    existing_group = db.query(models.Group).filter(
-        (models.Group.name == group.name) | (models.Group.access_code == group.access_code)
-    ).first()
+    existing_group = db.query(models.Group).filter((models.Group.name == group.name) | (models.Group.access_code == group.access_code)).first()
     
     if existing_group:
         raise HTTPException(status_code=400, detail="Grupa sa tim imenom ili šifrom već postoji")
@@ -94,3 +92,76 @@ def create_group(
     db.refresh(new_group)
     
     return new_group
+
+# Ruta za pridruzivanje grupi
+@app.post("/join")
+def join_group(
+    join_data: schemas.JoinGroup,
+    current_user: dict = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    # Nađi korisnika u bazi
+    user = db.query(models.User).filter(func.lower(models.User.wallet_address) == current_user["wallet_address"].lower()).first()
+
+    # Ako je već u grupi, javi grešku 
+    if user.group_id is not None:
+        raise HTTPException(status_code=400, detail="Već ste član jedne grupe!")
+
+    # Nađi grupu po šifri
+    group = db.query(models.Group).filter(models.Group.access_code == join_data.access_code).first()
+    
+    if not group:
+        raise HTTPException(status_code=404, detail="Pogrešna šifra grupe!")
+
+    # Ubaci korisnika u grupu
+    user.group_id = group.id
+    db.commit()
+    
+    return {"message": f"Uspešno ste pristupili grupi: {group.name}"}
+
+
+# Ruta za kreiranje teme
+@app.post("/topics", response_model=schemas.Topic)
+def create_topic(
+    topic: schemas.TopicCreate,
+    current_user: dict = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    # Prvo moramo naći korisnika da vidimo u kojoj je grupi
+    user = db.query(models.User).filter(func.lower(models.User.wallet_address) == current_user["wallet_address"].lower()).first()
+
+    if not user.group_id:
+        raise HTTPException(status_code=400, detail="Morate biti član grupe da biste predložili temu!")
+
+    # Kreiraj temu
+    new_topic = models.Topic(
+        title=topic.title,
+        description=topic.description,
+        status=models.TopicStatus.PENDING, # Po defaultu čeka odobrenje
+        group_id=user.group_id
+    )
+    
+    db.add(new_topic)
+    db.commit()
+    db.refresh(new_topic)
+    
+    return new_topic
+
+
+# Ruta za uzimanje tema(iz jedne grupe)
+@app.get("/topics", response_model=list[schemas.Topic])
+def get_topics(
+    current_user: dict = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    # Nađi korisnika
+    user = db.query(models.User).filter(func.lower(models.User.wallet_address) == current_user["wallet_address"].lower()).first()
+
+    if not user.group_id:
+        return [] # Ako nema grupu, nema ni tema
+
+    # Vrati samo teme koje pripadaju toj grupi
+    topics = db.query(models.Topic).filter(models.Topic.group_id == user.group_id).all()
+    
+    return topics
+

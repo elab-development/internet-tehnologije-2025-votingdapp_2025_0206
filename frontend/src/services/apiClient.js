@@ -19,4 +19,20 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+// Funkcija za učlanjenje u grupu
+export const joinGroup = async (accessCode) => {
+  return apiClient.post("/join", { access_code: accessCode });
+};
+
+// Funkcija za dobavljanje tema
+export const getTopics = async () => {
+  const response = await apiClient.get("/topics");
+  return response.data;
+};
+
+// Funkcija za predlaganje teme
+export const createTopic = async (title, description) => {
+  return apiClient.post("/topics", { title, description });
+};
+
 export default apiClient;
