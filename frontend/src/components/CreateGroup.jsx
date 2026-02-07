@@ -1,74 +1,87 @@
-
 import { useState } from "react";
-import { createGroup, getGroups } from "../services/groupService";
+import apiClient from "../services/apiClient"; // most sa backendom
 
 function CreateGroup() {
-  const [grupaID, setGrupaID] = useState("");
-  const [sifraGrupe, setSifraGrupe] = useState("");
-  const [poruka, setPoruka] = useState("");
+  const [name, setName] = useState("");
+  const [accessCode, setAccessCode] = useState("");
+  const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleCreate = () => {
-    setPoruka(""); 
+  const handleCreate = async () => {
+    setMessage("");
+    setIsError(false);
     
-    if (!grupaID || !sifraGrupe) {
-      setPoruka("Popuni sva polja");
+    if (!name || !accessCode) {
+      setMessage("Popuni sva polja");
+      setIsError(true);
       return;
     }
 
-    
-    const postojeca = getGroups().find(g => g.grupaID === grupaID);
-    if (postojeca) {
-      setPoruka("Grupa sa ovim ID-om već postoji");
-      return;
+    setLoading(true);
+
+    try {
+      // Šaljemo podatke na Backend
+      // apiClient automatski dodaje tvoj Admin Token u header
+      await apiClient.post("/groups", {
+        name: name,
+        access_code: accessCode
+      });
+
+      setMessage(`Uspeh! Grupa "${name}" je kreirana.`);
+      setName("");
+      setAccessCode("");
+      
+    } catch (error) {
+      setIsError(true);
+      // Prikazujemo poruku koju je Backend poslao (npr. "Grupa već postoji")
+      setMessage(error.response?.data?.detail || "Došlo je do greške pri kreiranju.");
+    } finally {
+      setLoading(false);
     }
-
-    
-    const newGroup = {
-      grupaID: grupaID,
-      sifraGrupe: sifraGrupe,
-      datumKreiranja: new Date().toISOString(),
-    };
-
-    createGroup(newGroup);
-    
-    
-    setPoruka(`Grupa "${grupaID}" kreirana. Šifra: ${sifraGrupe}`);
-    
-    
-    setGrupaID("");
-    setSifraGrupe("");
   };
 
   return (
     <div className="bg-white p-6 rounded-xl shadow max-w-md mx-auto mt-6">
-      <h3 className="text-xl font-semibold mb-4">Kreiranje nove grupe</h3>
+      <h3 className="text-xl font-semibold mb-4 text-gray-800">Kreiranje nove grupe</h3>
 
-      <input
-        className="border w-full p-2 mb-3"
-        placeholder="ID grupe"
-        value={grupaID}
-        onChange={(e) => setGrupaID(e.target.value)}
-      />
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Naziv Grupe</label>
+          <input
+            className="border border-gray-300 w-full p-2 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+            placeholder="npr. Tim Alpha"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
 
-      <input
-        className="border w-full p-2 mb-4"
-        placeholder="Šifra grupe"
-        value={sifraGrupe}
-        onChange={(e) => setSifraGrupe(e.target.value)}
-      />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Pristupna šifra</label>
+          <input
+            className="border border-gray-300 w-full p-2 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+            placeholder="npr. tajna123"
+            value={accessCode}
+            onChange={(e) => setAccessCode(e.target.value)}
+          />
+        </div>
 
-      <button
-        onClick={handleCreate}
-        className="bg-indigo-600 text-white px-4 py-2 rounded w-full"
-      >
-        Kreiraj grupu
-      </button>
+        <button
+          onClick={handleCreate}
+          disabled={loading}
+          className={`w-full py-2 px-4 rounded text-white font-semibold transition-colors ${
+            loading ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
+          }`}
+        >
+          {loading ? "Kreiranje..." : "Kreiraj grupu"}
+        </button>
 
-      {poruka && (
-        <p className={`mt-3 text-center ${poruka.includes("kreirana") ? "text-green-600" : "text-red-600"}`}>
-          {poruka}
-        </p>
-      )}
+        {message && (
+          <div className={`p-3 rounded text-sm text-center ${isError ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+            {message}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

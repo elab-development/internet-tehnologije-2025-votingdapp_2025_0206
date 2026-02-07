@@ -22,4 +22,18 @@ class UserDisplay(BaseModel):
     # Direktno ucitavanje podataka iz AlchemySQL-a baze
     class Config:
         from_attributes = True
+        
+# Šta frontend šalje (samo ime i šifru)
+class GroupCreate(BaseModel):
+    name: str
+    access_code: str
 
+# Šta backend vraća (celu grupu sa ID-jem i ko je napravio)
+class Group(BaseModel):
+    id: int
+    name: str
+    access_code: str
+    admin_wallet: str
+
+    class Config:
+        from_attributes = True

@@ -61,3 +61,36 @@ def login(login_data: schemas.UserLogin, db: Session = Depends(database.get_db))
         # Ovo nam služi da vidimo grešku (ako pukne)
         print(f"Greška: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/groups", response_model=schemas.Group)
+def create_group(
+    group: schemas.GroupCreate, 
+    current_user: dict = Depends(security.get_current_user), # Ovo proverava token
+    db: Session = Depends(database.get_db)
+):
+    print(f"Zahtev od: {current_user['wallet_address']} sa ulogom {current_user['role']}")
+
+    # Provera korisnika ADMIN?
+    if current_user["role"].lower() != "admin":
+        raise HTTPException(status_code=403, detail="Samo admin može da pravi grupe!")
+
+    # Da li grupa već postoji? (Po imenu ili šifri)
+    existing_group = db.query(models.Group).filter(
+        (models.Group.name == group.name) | (models.Group.access_code == group.access_code)
+    ).first()
+    
+    if existing_group:
+        raise HTTPException(status_code=400, detail="Grupa sa tim imenom ili šifrom već postoji")
+
+    # Kad zavrsi, upisuju se u bazu
+    new_group = models.Group(
+        name=group.name,
+        access_code=group.access_code,
+        admin_wallet=current_user["wallet_address"]
+    )
+    
+    db.add(new_group)
+    db.commit()
+    db.refresh(new_group)
+    
+    return new_group
