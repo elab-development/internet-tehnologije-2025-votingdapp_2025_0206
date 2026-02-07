@@ -41,4 +41,9 @@ export const updateTopicStatus = async (topicId, status) => {
   return apiClient.put(`/topics/${topicId}/${status}`);
 };
 
+// Funkcija koja proverava glas(YES", "NO" ili "ABSTAIN)
+export const castVote = async (topicId, decision) => {
+  return apiClient.post("/votes", { topic_id: topicId, decision });
+};
+
 export default apiClient;

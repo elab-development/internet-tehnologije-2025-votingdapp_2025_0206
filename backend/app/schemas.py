@@ -59,3 +59,8 @@ class Topic(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Za kreiranje glasa
+class VoteCreate(BaseModel):
+    topic_id: int
+    decision: str # "YES", "NO", "ABSTAIN"

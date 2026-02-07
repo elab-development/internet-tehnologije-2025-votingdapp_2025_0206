@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getTopics, createTopic, joinGroup } from "../services/apiClient"; // Uvozimo naše funkcije
+import { getTopics, createTopic, joinGroup, castVote} from "../services/apiClient"; // Uvozimo naše funkcije
 import { useAuth } from "../context/AuthContext";
 
 function Home() {
@@ -50,6 +50,18 @@ function Home() {
       loadTopics(); // Osveži listu
     } catch (error) {
       setMessage("Greška: " + (error.response?.data?.detail || "Niste član grupe!"));
+    }
+  };
+
+  // Funkcija za glasanje
+  const handleVote = async (topicId, decision) => {
+    try {
+      await castVote(topicId, decision);
+      setMessage("Glas uspešno zabeležen!");
+      // Opciono: Ponovo učitaj teme ili sakrij dugmiće lokalno
+      loadTopics(); 
+    } catch (error) {
+      setMessage("Greška: " + (error.response?.data?.detail || "Neuspešno glasanje"));
     }
   };
 
@@ -138,8 +150,25 @@ function Home() {
                   
                   {/* Dugme za glasanje(u radu)*/}
                   {topic.status === 'active' && (
-                    <div className="mt-4 flex gap-2">
-                       <button className="px-3 py-1 bg-gray-200 rounded text-sm">Glasanje uskoro...</button>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                       <button 
+                         onClick={() => handleVote(topic.id, "YES")}
+                         className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded font-semibold transition shadow-sm"
+                       >
+                         ZA
+                       </button>
+                       <button 
+                         onClick={() => handleVote(topic.id, "NO")}
+                         className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded font-semibold transition shadow-sm"
+                       >
+                         PROTIV
+                       </button>
+                       <button 
+                         onClick={() => handleVote(topic.id, "ABSTAIN")}
+                         className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded font-semibold transition shadow-sm"
+                       >
+                         UZDRŽANO
+                       </button>
                     </div>
                   )}
                 </div>

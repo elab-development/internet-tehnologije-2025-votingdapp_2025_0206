@@ -1,8 +1,9 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
 import enum
+from datetime import datetime
 
 # Pravimo kako ce izgledati tabele, odn. struktura baze
 
@@ -16,9 +17,9 @@ class UserRole(enum.Enum):
 
 # Vrsta glasanja
 class VoteOption(enum.Enum):
-    FOR = "ZA"
-    AGAINST = "PROTIV"
-    ABSTAIN = "UZDRZAN"
+    YES = "YES"
+    NO = "NO"
+    ABSTAIN = "ABSTAIN"
 
 # Status teme
 class TopicStatus(enum.Enum):
@@ -75,10 +76,13 @@ class Vote(Base):
     __tablename__ = "votes"
 
     id = Column(Integer, primary_key=True, index=True)
-    choice = Column(Enum(VoteOption), nullable=False)
+    decision = Column(Enum(VoteOption), nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     topic_id = Column(Integer, ForeignKey("topics.id"), nullable=False)
 
     # Relacije
     user = relationship("User", back_populates="votes")
     topic = relationship("Topic", back_populates="votes")
+
+    __table_args__ = (UniqueConstraint('user_id', 'topic_id', name='unique_user_vote'),)

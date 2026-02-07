@@ -207,3 +207,45 @@ def update_topic_status(
 
     db.commit()
     return {"message": f"Status teme promenjen u {status}"}
+
+# Ruta za glasanje 
+@app.post("/votes")
+def cast_vote(
+    vote: schemas.VoteCreate,
+    current_user: dict = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    # Trazi usera
+    user = db.query(models.User).filter(
+        func.lower(models.User.wallet_address) == current_user["wallet_address"].lower()
+    ).first()
+
+    # Trazi temu
+    topic = db.query(models.Topic).filter(models.Topic.id == vote.topic_id).first()
+    if not topic:
+        raise HTTPException(status_code=404, detail="Tema ne postoji")
+
+    # Proveri da li je tema aktivna
+    if topic.status != models.TopicStatus.ACTIVE:
+        raise HTTPException(status_code=400, detail="Glasanje nije aktivno za ovu temu")
+
+    # Proveri da li je korisnik vec glasao
+    existing_vote = db.query(models.Vote).filter(
+        models.Vote.user_id == user.id,
+        models.Vote.topic_id == topic.id
+    ).first()
+
+    if existing_vote:
+        raise HTTPException(status_code=400, detail="Već ste glasali na ovu temu!")
+
+    # Na kraju upisi glas
+    new_vote = models.Vote(
+        decision=vote.decision,
+        user_id=user.id,
+        topic_id=topic.id
+    )
+    
+    db.add(new_vote)
+    db.commit()
+    
+    return {"message": "Glas uspešno zabeležen!"}
