@@ -8,12 +8,9 @@ from pathlib import Path
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
-# Ucitavanje .env fajla
-env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path=env_path)
 
 # Konfiguracija iz .env
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = os.getenv("JWT_SECRET")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
@@ -23,7 +20,7 @@ def create_access_token(data: dict):
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire.timestamp()})
     if not SECRET_KEY:
-        raise ValueError("SECRET_KEY nije pronađen u .env fajlu!")
+        raise ValueError("JWT_SECRET nije pronađen u .env fajlu!")
 
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
