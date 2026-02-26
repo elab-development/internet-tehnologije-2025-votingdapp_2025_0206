@@ -61,6 +61,21 @@ def login(login_data: schemas.UserLogin, db: Session = Depends(database.get_db))
         print(f"Greška: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Endpoint koji vraća informacije o trenutno ulogovanom korisniku.
+# Može se koristiti na klijentu za osvežavanje role/tokena nakon
+# što je uloga promenjena na serveru.
+@app.get("/me", response_model=schemas.UserDisplay)
+def read_current_user(
+    current_user: dict = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    # Uzimamo najnovije podatke iz baze, tako da role koje su promenjene
+    # spolja budu odmah vidljive.
+    user = db.query(models.User).filter(
+        func.lower(models.User.wallet_address) == current_user["wallet_address"].lower()
+    ).first()
+    return user
+
 # Ruta za kreiranje grupe
 @app.post("/groups", response_model=schemas.Group)
 def create_group(

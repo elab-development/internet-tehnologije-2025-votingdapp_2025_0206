@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
   const processToken = (token) => {
     try {
       const decoded = jwtDecode(token);
-      // Backend salje ulogu malim slovima ("admin"), a tvoj frontend ocekuje velika ("Admin")
+      // Backend salje ulogu malim slovima ("admin"), a frontend ocekuje velika ("Admin")
       const roleCapitalized = decoded.role.charAt(0).toUpperCase() + decoded.role.slice(1);
       
       setUser({
@@ -43,8 +43,34 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  // reload latest user info from backend; will update role if changed
+  const refreshUser = async () => {
+    if (!user) return;
+    try {
+      const res = await import("../services/apiClient").then(m => m.getCurrentUser());
+      const roleCapitalized = res.role.charAt(0).toUpperCase() + res.role.slice(1);
+      setUser({
+        walletAddress: res.wallet_address,
+        uloga: roleCapitalized,
+      });
+    } catch (err) {
+      // ako je token istekao ili je invalidan, otpusti korisnika
+      console.error("Failed to refresh user:", err);
+      logout();
+    }
+  };
+
+  // prilikom inicijalnog učitavanja ili kad se user promeni, osveži podatke
+  useEffect(() => {
+    if (user) {
+      refreshUser();
+    }
+  }, [user]);
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider
+      value={{ user, login, logout, loading, refreshUser }}
+    >
       {!loading && children}
     </AuthContext.Provider>
   );
