@@ -1,6 +1,10 @@
 import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 function Navbar() {
+  const { user } = useAuth();
+  const isAdmin = user && user.uloga === "Admin";
+
   return (
     <nav className="bg-indigo-600 text-white px-6 py-4 shadow-md flex justify-between items-center">
       
@@ -17,12 +21,14 @@ function Navbar() {
         >
           Istorija
         </Link>
-        <Link
-          to="/dashboard"
-          className="hover:bg-indigo-500 px-3 py-1 rounded transition"
-        >
-          Dashboard
-        </Link>
+        {isAdmin && (
+          <Link
+            to="/dashboard"
+            className="hover:bg-indigo-500 px-3 py-1 rounded transition"
+          >
+            Dashboard
+          </Link>
+        )}
       </div>
     </nav>
   );

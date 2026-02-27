@@ -30,12 +30,16 @@ export function AuthProvider({ children }) {
     const token = sessionStorage.getItem("voting_token");
     if (token) {
       processToken(token);
+      // odmah pitaj server za najnoviju ulogu/korisnika
+      refreshUser().catch(() => {});
     }
     setLoading(false);
   }, []);
 
-  const login = (token) => {
+  const login = async (token) => {
     processToken(token);
+    // nakon pristizanja tokena, osveži iz backend-a
+    await refreshUser().catch(() => {});
   };
 
   const logout = () => {
@@ -45,7 +49,6 @@ export function AuthProvider({ children }) {
 
   // reload latest user info from backend; will update role if changed
   const refreshUser = async () => {
-    if (!user) return;
     try {
       const res = await import("../services/apiClient").then(m => m.getCurrentUser());
       const roleCapitalized = res.role.charAt(0).toUpperCase() + res.role.slice(1);
@@ -60,12 +63,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // prilikom inicijalnog učitavanja ili kad se user promeni, osveži podatke
-  useEffect(() => {
-    if (user) {
-      refreshUser();
-    }
-  }, [user]);
 
   return (
     <AuthContext.Provider

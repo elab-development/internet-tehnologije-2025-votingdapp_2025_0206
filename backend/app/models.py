@@ -13,7 +13,6 @@ from datetime import datetime
 class UserRole(enum.Enum):
     ADMIN = "admin"
     USER = "user"
-    MODERATOR = "moderator"
 
 # Vrsta glasanja
 class VoteOption(enum.Enum):
