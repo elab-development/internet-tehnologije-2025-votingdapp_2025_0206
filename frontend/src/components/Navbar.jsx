@@ -1,9 +1,15 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 function Navbar() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = user && user.uloga === "Admin";
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
 
   return (
     <nav className="bg-indigo-600 text-white px-6 py-4 shadow-md flex justify-between items-center">
@@ -30,6 +36,13 @@ function Navbar() {
           </Link>
         )}
       </div>
+
+      <button
+        onClick={handleLogout}
+        className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-white font-semibold transition-colors"
+      >
+        Odjava
+      </button>
     </nav>
   );
 }
