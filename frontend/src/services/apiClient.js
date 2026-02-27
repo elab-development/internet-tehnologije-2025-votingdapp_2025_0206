@@ -25,8 +25,6 @@ export const joinGroup = async (accessCode) => {
 };
 
 // Dohvati informacije o trenutno ulogovanom korisniku.
-// Koristi se za osvežavanje state-a kada se role ili druga svojstva
-// promene na serveru.
 export const getCurrentUser = async () => {
   const response = await apiClient.get("/me");
   return response.data;
