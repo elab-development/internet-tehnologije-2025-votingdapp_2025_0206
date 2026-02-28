@@ -4,10 +4,7 @@ import { useAuth } from "../context/AuthContext";
 function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const isAdmin =
-    user &&
-    Array.isArray(user.memberships) &&
-    user.memberships.some((m) => m.role.toLowerCase() === "admin");
+  const isAdmin = user && user.uloga === "Admin";
 
   const handleLogout = () => {
     logout();

@@ -34,7 +34,7 @@ function AppWrapper() {
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute roles={["Admin", "Moderator"]}>
+            <ProtectedRoute roles={["Admin"]}>
               <Dashboard />
             </ProtectedRoute>
           }

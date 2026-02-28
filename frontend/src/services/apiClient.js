@@ -24,6 +24,12 @@ export const joinGroup = async (accessCode) => {
   return apiClient.post("/join", { access_code: accessCode });
 };
 
+// Dohvati informacije o trenutno ulogovanom korisniku.
+export const getCurrentUser = async () => {
+  const response = await apiClient.get("/me");
+  return response.data;
+};
+
 // Funkcija za dobavljanje tema
 export const getTopics = async () => {
   const response = await apiClient.get("/topics");

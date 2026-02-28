@@ -8,7 +8,6 @@ export default function ProtectedRoute({ children, roles }) {
     return <Navigate to="/" replace />;
   }
 
- 
   if (roles && !roles.includes(user.uloga)) {
     return <Navigate to="/home" replace />;
   }

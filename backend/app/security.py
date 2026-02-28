@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 from pathlib import Path
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-
+from . import models, database
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 # Konfiguracija iz .env
 SECRET_KEY = os.getenv("JWT_SECRET")
@@ -47,7 +49,10 @@ def verify_signature(wallet_address: str, signature: str):
 # Funkcija za proveru tokena 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-def get_current_user(token: str = Depends(oauth2_scheme)):
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(database.get_db),
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Nije moguće validirati podatke",
@@ -57,11 +62,17 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         # Dekodiramo token koristeći tajni kljuc iz .env-a
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         wallet_address: str = payload.get("sub")
-        role: str = payload.get("role")
-        
+        # role claim is still available but we ignore it below
         if wallet_address is None:
             raise credentials_exception
-            
-        return {"wallet_address": wallet_address, "role": role}
+
+        # lookup current user in database – ensures role changes are reflected
+        user = db.query(models.User).filter(
+            func.lower(models.User.wallet_address) == wallet_address.lower()
+        ).first()
+        if not user:
+            raise credentials_exception
+
+        return {"wallet_address": user.wallet_address, "role": user.role.value}
     except Exception:
         raise credentials_exception
