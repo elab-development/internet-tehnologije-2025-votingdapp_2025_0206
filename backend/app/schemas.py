@@ -15,10 +15,18 @@ class Token(BaseModel):
     user_role: UserRole
 
 # Prikazivanje korisnika kad ga traze pomocu API
+class Membership(BaseModel):
+    group_id: int
+    role: UserRole
+
+    class Config:
+        from_attributes = True
+
 class UserDisplay(BaseModel):
     id: int
     wallet_address: str
     role: UserRole
+    memberships: list[Membership] = []
 
     # Direktno ucitavanje podataka iz AlchemySQL-a baze
     class Config:
@@ -35,6 +43,8 @@ class Group(BaseModel):
     name: str
     access_code: str
     admin_wallet: str
+    contract_address: Optional[str] = None
+    factory_address: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -57,8 +67,11 @@ class TopicResults(BaseModel):
 # Za kreiranje tema
 class Topic(BaseModel):
     id: int
-    title: str
-    description: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    ipfs_hash: Optional[str] = None
+    on_chain_topic_id: Optional[int] = None
+    contract_address: Optional[str] = None
     status: str
     created_at: datetime
     group_id: int

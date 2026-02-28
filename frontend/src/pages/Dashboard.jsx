@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { getTopics, updateTopicStatus } from "../services/apiClient";
-import CreateGroup from "../components/CreateGroup";
 import { useAuth } from "../context/AuthContext"; 
 
 function Dashboard() {
@@ -55,11 +54,7 @@ function Dashboard() {
     <div className="min-h-screen bg-gray-100 p-6">
       <h2 className="text-3xl font-bold text-center mb-6 text-gray-800">Admin Dashboard</h2>
 
-      {/* Komponenta za pravljenje grupe */}
-      <div className="mb-8">
-        <CreateGroup />
-      </div>
-
+    
       {/* Tabela sa temama */}
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow mt-6 overflow-hidden">
         <div className="p-4 bg-gray-50 border-b">

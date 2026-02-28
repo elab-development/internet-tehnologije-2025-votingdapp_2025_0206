@@ -28,6 +28,20 @@ class TopicStatus(enum.Enum):
 
 # Tabele
 
+# Membership table connects users and groups with a per-group role
+class Membership(Base):
+    __tablename__ = "memberships"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+    role = Column(Enum(UserRole), default=UserRole.USER)
+
+    user = relationship("User", back_populates="memberships")
+    group = relationship("Group", back_populates="memberships")
+
+    __table_args__ = (UniqueConstraint("user_id", "group_id"),)
+
 # Korisnik
 class User(Base):
     __tablename__ = "users"
@@ -35,10 +49,10 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     wallet_address = Column(String, unique=True, index=True, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.USER)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
+    # *no* longer storing a single group_id; memberships table handles many-to-many
 
     # Relacije
-    group = relationship("Group", back_populates="users")
+    memberships = relationship("Membership", back_populates="user")
     votes = relationship("Vote", back_populates="user")
 
 
@@ -50,9 +64,11 @@ class Group(Base):
     name = Column(String, unique=True)
     access_code = Column(String, unique=True)
     admin_wallet = Column(String, nullable=False)
+    contract_address = Column(String, unique=True, nullable=True)  # deployed Group contract
+    factory_address = Column(String, nullable=True)               # optional factory
 
     # Relacije
-    users = relationship("User", back_populates="group")
+    memberships = relationship("Membership", back_populates="group")
     topics = relationship("Topic", back_populates="group")
 
 # Tema
@@ -60,8 +76,12 @@ class Topic(Base):
     __tablename__ = "topics"
 
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
-    description = Column(String, nullable=False)
+    # metadata stored on IPFS, title/description optional backup
+    title = Column(String, nullable=True)
+    description = Column(String, nullable=True)
+    ipfs_hash = Column(String, nullable=True)
+    on_chain_topic_id = Column(Integer, nullable=True)
+    contract_address = Column(String, nullable=True)
     status = Column(Enum(TopicStatus), default=TopicStatus.PENDING)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     group_id = Column(Integer, ForeignKey("groups.id"))

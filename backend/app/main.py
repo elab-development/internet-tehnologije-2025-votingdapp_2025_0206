@@ -2,6 +2,9 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from . import models, schemas, database, security
+from .ipfs_service import upload_topic_metadata
+from .chain_listener import run_event_listener_loop
+import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 
 # Pravimo tabele(ako ne postoje)
@@ -21,6 +24,25 @@ app.add_middleware(
 @app.get("/")
 def home():
     return {"status": "online", "message": "Voting Dapp Backend is running"}
+
+
+@app.post("/ipfs/upload")
+def upload_to_ipfs(payload: dict, current_user: dict = Depends(security.get_current_user)):
+    title = payload.get("title")
+    description = payload.get("description")
+    options = payload.get("options", [])
+
+    ipfs_hash = upload_topic_metadata(title, description, options)
+    if not ipfs_hash:
+        raise HTTPException(status_code=500, detail="IPFS upload failed")
+
+    return {"ipfs_hash": ipfs_hash}
+
+
+@app.on_event("startup")
+async def start_event_sync():
+    # Start the blockchain event sync loop in background
+    asyncio.create_task(run_event_listener_loop())
 
 # Ruta za logovanje
 @app.post("/login", response_model=schemas.Token)
@@ -105,8 +127,7 @@ def create_group(
     db.add(new_group)
     db.commit()
     db.refresh(new_group)
-    
-    return new_group
+
 
 # Ruta za pridruzivanje grupi
 @app.post("/join")

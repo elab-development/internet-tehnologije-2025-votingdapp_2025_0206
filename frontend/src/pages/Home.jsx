@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { getTopics, createTopic, joinGroup, castVote} from "../services/apiClient"; // Uvozimo naše funkcije
 import { useAuth } from "../context/AuthContext";
+import CreateGroup from "../components/CreateGroup";
 
 function Home() {
   const { user } = useAuth();
@@ -71,15 +72,17 @@ function Home() {
         
         {/* header */}
         <div className="bg-white p-6 rounded-xl shadow mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Dobrodošli, {user?.walletAddress?.substring(0,6)}...</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Dobrodošli, {user?.walletAddress?.substring(0,10)}...</h1>
           {message && <p className="mt-2 p-2 bg-blue-100 text-blue-800 rounded">{message}</p>}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
-          {/* Akcije (Join & Predlozi)*/}
+          {/* Akcije (Create, Join & Predlozi)*/}
           <div className="space-y-6">
-            
+            {/* Kartica za kreiranje grupe */}
+            <CreateGroup />
+
             {/* Kartica za ulazak u grupu */}
             <div className="bg-white p-5 rounded-xl shadow">
               <h3 className="font-semibold mb-3">Pristupi Grupi</h3>
