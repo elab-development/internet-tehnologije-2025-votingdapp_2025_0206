@@ -64,6 +64,8 @@ class Group(Base):
     name = Column(String, unique=True)
     access_code = Column(String, unique=True)
     admin_wallet = Column(String, nullable=False)
+    contract_address = Column(String, unique=True, nullable=True)  # deployed Group contract
+    factory_address = Column(String, nullable=True)               # optional factory
 
     # Relacije
     memberships = relationship("Membership", back_populates="group")
@@ -74,8 +76,12 @@ class Topic(Base):
     __tablename__ = "topics"
 
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
-    description = Column(String, nullable=False)
+    # metadata stored on IPFS, title/description optional backup
+    title = Column(String, nullable=True)
+    description = Column(String, nullable=True)
+    ipfs_hash = Column(String, nullable=True)
+    on_chain_topic_id = Column(Integer, nullable=True)
+    contract_address = Column(String, nullable=True)
     status = Column(Enum(TopicStatus), default=TopicStatus.PENDING)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     group_id = Column(Integer, ForeignKey("groups.id"))
