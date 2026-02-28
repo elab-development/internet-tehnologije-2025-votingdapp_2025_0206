@@ -13,7 +13,6 @@ from datetime import datetime
 class UserRole(enum.Enum):
     ADMIN = "admin"
     USER = "user"
-    MODERATOR = "moderator"
 
 # Vrsta glasanja
 class VoteOption(enum.Enum):
@@ -29,6 +28,20 @@ class TopicStatus(enum.Enum):
 
 # Tabele
 
+# Membership table connects users and groups with a per-group role
+class Membership(Base):
+    __tablename__ = "memberships"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+    role = Column(Enum(UserRole), default=UserRole.USER)
+
+    user = relationship("User", back_populates="memberships")
+    group = relationship("Group", back_populates="memberships")
+
+    __table_args__ = (UniqueConstraint("user_id", "group_id"),)
+
 # Korisnik
 class User(Base):
     __tablename__ = "users"
@@ -36,10 +49,10 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     wallet_address = Column(String, unique=True, index=True, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.USER)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
+    # *no* longer storing a single group_id; memberships table handles many-to-many
 
     # Relacije
-    group = relationship("Group", back_populates="users")
+    memberships = relationship("Membership", back_populates="user")
     votes = relationship("Vote", back_populates="user")
 
 
@@ -53,7 +66,7 @@ class Group(Base):
     admin_wallet = Column(String, nullable=False)
 
     # Relacije
-    users = relationship("User", back_populates="group")
+    memberships = relationship("Membership", back_populates="group")
     topics = relationship("Topic", back_populates="group")
 
 # Tema

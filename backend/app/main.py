@@ -61,36 +61,48 @@ def login(login_data: schemas.UserLogin, db: Session = Depends(database.get_db))
         print(f"Greška: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Informacije o trenutno ulogovanom korisniku, uključujući membership-e
+@app.get("/me", response_model=schemas.UserDisplay)
+def read_current_user(
+    current_user: dict = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    user = db.query(models.User).filter(func.lower(models.User.wallet_address) == current_user["wallet_address"].lower()).first()
+    # Pydantic će automatski preuzeti related memberships ako ih učitamo
+    return user
+
 # Ruta za kreiranje grupe
 @app.post("/groups", response_model=schemas.Group)
 def create_group(
     group: schemas.GroupCreate, 
-    current_user: dict = Depends(security.get_current_user), # Ovo proverava token
+    current_user: dict = Depends(security.get_current_user),
     db: Session = Depends(database.get_db)
 ):
-    print(f"Zahtev od: {current_user['wallet_address']} sa ulogom {current_user['role']}")
+    # anyone logged in may create a group; the creator becomes its admin
+    wallet = current_user["wallet_address"].lower()
 
-    # Provera korisnika ADMIN?
-    if current_user["role"].lower() != "admin":
-        raise HTTPException(status_code=403, detail="Samo admin može da pravi grupe!")
-
-    # Da li grupa već postoji? (Po imenu ili šifri)
-    existing_group = db.query(models.Group).filter((models.Group.name == group.name) | (models.Group.access_code == group.access_code)).first()
-    
+    existing_group = db.query(models.Group).filter(
+        (models.Group.name == group.name) | (models.Group.access_code == group.access_code)
+    ).first()
     if existing_group:
         raise HTTPException(status_code=400, detail="Grupa sa tim imenom ili šifrom već postoji")
 
-    # Kad zavrsi, upisuju se u bazu
     new_group = models.Group(
         name=group.name,
         access_code=group.access_code,
-        admin_wallet=current_user["wallet_address"]
+        admin_wallet=wallet
     )
-    
     db.add(new_group)
     db.commit()
     db.refresh(new_group)
-    
+
+    # add membership for creator with admin role
+    user = db.query(models.User).filter(func.lower(models.User.wallet_address) == wallet).first()
+    if user:
+        membership = models.Membership(user_id=user.id, group_id=new_group.id, role=models.UserRole.ADMIN)
+        db.add(membership)
+        db.commit()
+
     return new_group
 
 # Ruta za pridruzivanje grupi
@@ -100,23 +112,26 @@ def join_group(
     current_user: dict = Depends(security.get_current_user),
     db: Session = Depends(database.get_db)
 ):
-    # Nađi korisnika u bazi
-    user = db.query(models.User).filter(func.lower(models.User.wallet_address) == current_user["wallet_address"].lower()).first()
+    wallet = current_user["wallet_address"].lower()
+    user = db.query(models.User).filter(func.lower(models.User.wallet_address) == wallet).first()
 
-    # Ako je već u grupi, javi grešku 
-    if user.group_id is not None:
-        raise HTTPException(status_code=400, detail="Već ste član jedne grupe!")
-
-    # Nađi grupu po šifri
+    # find group by code
     group = db.query(models.Group).filter(models.Group.access_code == join_data.access_code).first()
-    
     if not group:
         raise HTTPException(status_code=404, detail="Pogrešna šifra grupe!")
 
-    # Ubaci korisnika u grupu
-    user.group_id = group.id
+    # check existing membership
+    existing = db.query(models.Membership).filter(
+        models.Membership.user_id == user.id,
+        models.Membership.group_id == group.id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Već ste član te grupe!")
+
+    membership = models.Membership(user_id=user.id, group_id=group.id, role=models.UserRole.USER)
+    db.add(membership)
     db.commit()
-    
+
     return {"message": f"Uspešno ste pristupili grupi: {group.name}"}
 
 
@@ -129,16 +144,17 @@ def create_topic(
 ):
     # Prvo moramo naći korisnika da vidimo u kojoj je grupi
     user = db.query(models.User).filter(func.lower(models.User.wallet_address) == current_user["wallet_address"].lower()).first()
-
-    if not user.group_id:
+    # find any membership (assumes at least one group)
+    membership = db.query(models.Membership).filter(models.Membership.user_id == user.id).first()
+    if not membership:
         raise HTTPException(status_code=400, detail="Morate biti član grupe da biste predložili temu!")
 
-    # Kreiraj temu
+    # Kreiraj temu in the first group the user belongs to
     new_topic = models.Topic(
         title=topic.title,
         description=topic.description,
         status=models.TopicStatus.PENDING, # Po defaultu čeka odobrenje
-        group_id=user.group_id
+        group_id=membership.group_id
     )
     
     db.add(new_topic)
@@ -154,20 +170,17 @@ def get_topics(
     db: Session = Depends(database.get_db)
 ):
     wallet = current_user["wallet_address"].lower()
-    role = current_user["role"].lower()
 
-    # Pronalazenje tema na osnovu uloge
-    if role == "admin":
-        owned_groups = db.query(models.Group).filter(models.Group.admin_wallet == wallet).all()
-        group_ids = [g.id for g in owned_groups]
-        if not group_ids:
-            return []
-        topics = db.query(models.Topic).filter(models.Topic.group_id.in_(group_ids)).all()
-    else:
-        user = db.query(models.User).filter(func.lower(models.User.wallet_address) == wallet).first()
-        if not user or not user.group_id:
-            return []
-        topics = db.query(models.Topic).filter(models.Topic.group_id == user.group_id).all()
+    user = db.query(models.User).filter(func.lower(models.User.wallet_address) == wallet).first()
+    if not user:
+        return []
+
+    # get all groups user belongs to
+    memberships = db.query(models.Membership).filter(models.Membership.user_id == user.id).all()
+    group_ids = [m.group_id for m in memberships]
+    if not group_ids:
+        return []
+    topics = db.query(models.Topic).filter(models.Topic.group_id.in_(group_ids)).all()
 
     # Prebrojavanje glasova za svaku temu
     for topic in topics:
@@ -194,18 +207,19 @@ def update_topic_status(
     current_user: dict = Depends(security.get_current_user),
     db: Session = Depends(database.get_db)
 ):
-    # Provera da li je Admin
-    if current_user["role"].lower() != "admin":
-        raise HTTPException(status_code=403, detail="Samo admin menja status!")
+    # only group-level admins may change status
+    wallet = current_user["wallet_address"].lower()
 
     topic = db.query(models.Topic).filter(models.Topic.id == topic_id).first()
     if not topic:
         raise HTTPException(status_code=404, detail="Tema nije pronađena")
 
-    # Provera da li je Admin vlasnik grupe kojoj tema pripada
-    group = db.query(models.Group).filter(models.Group.id == topic.group_id).first()
-    if group.admin_wallet.lower() != current_user["wallet_address"].lower():
-        raise HTTPException(status_code=403, detail="Niste vlasnik ove grupe!")
+    membership = db.query(models.Membership).filter(
+        models.Membership.user_id == db.query(models.User).filter(func.lower(models.User.wallet_address) == wallet).first().id,
+        models.Membership.group_id == topic.group_id
+    ).first()
+    if not membership or membership.role != models.UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Samo admin menja status!")
 
     # Azuriranje statusa
     # Mapiramo string u Enum (active - ACTIVE, closed - CLOSED)

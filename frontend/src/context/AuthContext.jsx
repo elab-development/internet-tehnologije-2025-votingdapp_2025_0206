@@ -11,12 +11,11 @@ export function AuthProvider({ children }) {
   const processToken = (token) => {
     try {
       const decoded = jwtDecode(token);
-      // Backend salje ulogu malim slovima ("admin"), a tvoj frontend ocekuje velika ("Admin")
       const roleCapitalized = decoded.role.charAt(0).toUpperCase() + decoded.role.slice(1);
-      
       setUser({
         walletAddress: decoded.sub,
-        uloga: roleCapitalized, // Sada će biti "Admin" ili "User"
+        uloga: roleCapitalized,
+        memberships: [],
       });
       sessionStorage.setItem("voting_token", token);
     } catch (error) {
@@ -26,16 +25,17 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    // Kad se učita stranica, proveri da li već imamo token
     const token = sessionStorage.getItem("voting_token");
     if (token) {
       processToken(token);
+      refreshUser().catch(() => {});
     }
     setLoading(false);
   }, []);
 
-  const login = (token) => {
+  const login = async (token) => {
     processToken(token);
+    await refreshUser().catch(() => {});
   };
 
   const logout = () => {
@@ -43,8 +43,23 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    try {
+      const res = await import("../services/apiClient").then((m) => m.getCurrentUser());
+      const roleCapitalized = res.role.charAt(0).toUpperCase() + res.role.slice(1);
+      setUser({
+        walletAddress: res.wallet_address,
+        uloga: roleCapitalized,
+        memberships: res.memberships || [],
+      });
+    } catch (err) {
+      console.error("Failed to refresh user:", err);
+      logout();
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, refreshUser }}>
       {!loading && children}
     </AuthContext.Provider>
   );

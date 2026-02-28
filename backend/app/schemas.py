@@ -15,10 +15,18 @@ class Token(BaseModel):
     user_role: UserRole
 
 # Prikazivanje korisnika kad ga traze pomocu API
+class MembershipBase(BaseModel):
+    group_id: int
+    role: UserRole
+
+    class Config:
+        from_attributes = True
+
 class UserDisplay(BaseModel):
     id: int
     wallet_address: str
     role: UserRole
+    memberships: list[MembershipBase] = []
 
     # Direktno ucitavanje podataka iz AlchemySQL-a baze
     class Config:
