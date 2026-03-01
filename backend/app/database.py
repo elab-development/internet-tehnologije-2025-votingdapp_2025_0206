@@ -6,9 +6,6 @@ import os
 # URL
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Provera
-print(f"Učitan URL: {SQLALCHEMY_DATABASE_URL}")
-
 if not SQLALCHEMY_DATABASE_URL:
     # ako nema, stajemo
     raise ValueError("GRESKA: DATABASE_URL nije pronađen! Proveri .env fajl.")

@@ -9,6 +9,7 @@ contract Group {
     uint public topicCount;
 
     struct Member {
+        bool everJoined;
         bool exists;
         uint joinedAtTopic;
         uint leftAtTopic;
@@ -51,7 +52,7 @@ contract Group {
 
     constructor(address _admin) {
         admin = _admin;
-        members[_admin] = Member(true, 0, 0);
+        members[_admin] = Member(true,true, 0, 0);
         memberCount = 1;
     }
 
@@ -62,6 +63,7 @@ contract Group {
         require(!members[user].exists);
 
         members[user] = Member(
+            true,
             true,
             topicCount,
             0
@@ -77,8 +79,8 @@ contract Group {
         onlyAdmin
     {
         Member storage m = members[user];
-        
-        require(m.exists);
+
+        require(m.exists, "Not a member");
 
         m.exists = false;
         m.leftAtTopic = topicCount;
@@ -109,13 +111,16 @@ contract Group {
         Topic storage t = topics[topicId];
 
         require(!t.finalized);
+        require(topicId < topicCount, "Invalid topic");
+        require(choice <= 2, "Invalid vote");
+
 
         Member storage m = members[msg.sender];
 
-        require(
-            (m.joinedAtTopic <= topicId) && (m.leftAtTopic==0 || m.leftAtTopic > topicId),
-            "Joined after topic"
-        );
+        require(m.everJoined, "Not a member");
+        require(m.joinedAtTopic <= topicId &&(m.leftAtTopic == 0 || m.leftAtTopic > topicId),"Not eligible");
+
+
 
         require(!t.voted[msg.sender]);
 

@@ -49,7 +49,6 @@ function Login() {
       }
 
     } catch (err) {
-      console.error(err);
       setError("Greška pri logovanju: " + (err.response?.data?.detail || err.message));
     } finally {
       setLoading(false);

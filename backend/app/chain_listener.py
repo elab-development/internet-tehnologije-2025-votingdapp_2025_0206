@@ -88,25 +88,11 @@ class ChainListener:
             )
             return pending_group
 
-        generated_name = f"OnChain-{group_address}"
-        generated_access_code = group_address
-
-        new_group = models.Group(
-            name=generated_name,
-            access_code=generated_access_code,
-            admin_wallet=admin_address,
-            contract_address=group_address
-        )
-        db.add(new_group)
-        db.commit()
-        db.refresh(new_group)
         logger.info(
-            "Created group from blockchain event: id=%s contract=%s admin=%s",
-            new_group.id,
-            new_group.contract_address,
-            new_group.admin_wallet,
+            "Skipping GroupCreated auto-insert for contract %s (no pending group metadata found)",
+            group_address,
         )
-        return new_group
+        return None
     
     def sync_group_created_events(self, db: Session):
         try:

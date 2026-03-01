@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
-import { getTopics, createTopic, joinGroup, castVote} from "../services/apiClient"; // Uvozimo naše funkcije
+import { getTopics, createTopic, joinGroup, castVote } from "../services/apiClient"; // Uvozimo naše funkcije
 import { useAuth } from "../context/AuthContext";
 import CreateGroup from "../components/CreateGroup";
+import { connectWallet } from "../services/web3";
+import { castVote as castVoteOnChain } from "../services/contractServise";
 
 function Home() {
   const { user, walletAccount, refreshUser } = useAuth();
@@ -13,14 +15,15 @@ function Home() {
   const [newTopic, setNewTopic] = useState({ title: "", description: "" });
   const [message, setMessage] = useState("");
   const [joining, setJoining] = useState(false);
+  const [votingTopicId, setVotingTopicId] = useState(null);
 
   // Učitaj teme čim se stranica otvori
   const loadTopics = async () => {
     try {
       const data = await getTopics();
       setTopics(data);
-    } catch (error) {
-      console.error("Greška pri učitavanju tema:", error);
+    } catch {
+      setMessage("Greška pri učitavanju tema.");
     } finally {
       setLoading(false);
     }
@@ -71,14 +74,54 @@ function Home() {
   };
 
   // Funkcija za glasanje
-  const handleVote = async (topicId, decision) => {
+  const handleVote = async (topic, decision) => {
+    if (!topic?.contract_address) {
+      setMessage("Tema nema adresu ugovora grupe.");
+      return;
+    }
+    if (!Number.isInteger(topic?.on_chain_topic_id)) {
+      setMessage("Tema nema on-chain topic ID, nije moguće glasati.");
+      return;
+    }
+
+    const voteMap = { YES: 0, NO: 1, ABSTAIN: 2 };
+    const choice = voteMap[decision];
+    if (choice === undefined) {
+      setMessage("Nevažeća odluka glasanja.");
+      return;
+    }
+
     try {
-      await castVote(topicId, decision);
-      setMessage("Glas uspešno zabeležen!");
-      // Opciono: Ponovo učitaj teme ili sakrij dugmiće lokalno
-      loadTopics(); 
+      setVotingTopicId(topic.id);
+      const account = await connectWallet();
+      if (!account) {
+        throw new Error("MetaMask nalog nije povezan");
+      }
+
+      const loggedWallet = user?.walletAddress?.toLowerCase();
+      if (loggedWallet && loggedWallet !== account.toLowerCase()) {
+        throw new Error("Poveži isti MetaMask nalog kojim si ulogovan");
+      }
+
+      const { txHash } = await castVoteOnChain(
+        topic.contract_address,
+        topic.on_chain_topic_id,
+        choice,
+        account
+      );
+
+      await castVote(topic.id, decision, {
+        transaction_hash: txHash,
+        contract_address: topic.contract_address,
+        on_chain_topic_id: topic.on_chain_topic_id,
+      });
+
+      setMessage(`Glas uspešno zabeležen on-chain. Tx: ${txHash?.slice(0, 12)}...`);
+      await loadTopics();
     } catch (error) {
-      setMessage("Greška: " + (error.response?.data?.detail || "Neuspešno glasanje"));
+      setMessage("Greška: " + (error?.response?.data?.detail || error?.message || "Neuspešno glasanje"));
+    } finally {
+      setVotingTopicId(null);
     }
   };
 
@@ -224,20 +267,35 @@ function Home() {
                   {topic.status === 'active' && (
                     <div className="mt-4 flex flex-wrap gap-3">
                        <button 
-                         onClick={() => handleVote(topic.id, "YES")}
-                         className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded font-semibold transition shadow-sm"
+                         onClick={() => handleVote(topic, "YES")}
+                         disabled={votingTopicId === topic.id}
+                         className={`flex-1 text-white py-2 px-4 rounded font-semibold transition shadow-sm ${
+                           votingTopicId === topic.id
+                             ? "bg-green-300 cursor-not-allowed"
+                             : "bg-green-500 hover:bg-green-600"
+                         }`}
                        >
-                         ZA
+                         {votingTopicId === topic.id ? "Čekaj..." : "ZA"}
                        </button>
                        <button 
-                         onClick={() => handleVote(topic.id, "NO")}
-                         className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded font-semibold transition shadow-sm"
+                         onClick={() => handleVote(topic, "NO")}
+                         disabled={votingTopicId === topic.id}
+                         className={`flex-1 text-white py-2 px-4 rounded font-semibold transition shadow-sm ${
+                           votingTopicId === topic.id
+                             ? "bg-red-300 cursor-not-allowed"
+                             : "bg-red-500 hover:bg-red-600"
+                         }`}
                        >
                          PROTIV
                        </button>
                        <button 
-                         onClick={() => handleVote(topic.id, "ABSTAIN")}
-                         className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded font-semibold transition shadow-sm"
+                         onClick={() => handleVote(topic, "ABSTAIN")}
+                         disabled={votingTopicId === topic.id}
+                         className={`flex-1 text-white py-2 px-4 rounded font-semibold transition shadow-sm ${
+                           votingTopicId === topic.id
+                             ? "bg-gray-300 cursor-not-allowed"
+                             : "bg-gray-500 hover:bg-gray-600"
+                         }`}
                        >
                          UZDRŽANO
                        </button>

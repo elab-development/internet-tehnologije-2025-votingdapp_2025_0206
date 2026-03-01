@@ -265,6 +265,19 @@
 				"type": "uint256"
 			}
 		],
+		"name": "finalize",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "topicId",
+				"type": "uint256"
+			}
+		],
 		"name": "tryFinalize",
 		"outputs": [],
 		"stateMutability": "nonpayable",

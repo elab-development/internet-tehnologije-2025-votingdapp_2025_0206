@@ -13,7 +13,6 @@ class IPFSClient:
         self.api_secret = os.getenv('PINATA_API_SECRET')
         self.jwt = os.getenv('PINATA_JWT')
         self.api_url = os.getenv('IPFS_API_URL')
-        self.gateway_url = os.getenv('IPFS_GATEWAY_URL')
         
         self.last_error: Optional[str] = None
         
@@ -25,8 +24,6 @@ class IPFSClient:
             logger.warning("Pinata credentials not configured. IPFS uploads will not work.")
         if not has_api_url:
             logger.warning("IPFS_API_URL not configured. IPFS uploads will not work.")
-        if not self.gateway_url:
-            logger.warning("IPFS_GATEWAY_URL not configured. IPFS reads will not work.")
 
         if not has_auth or not has_api_url:
             self.configured = False
@@ -99,33 +96,6 @@ class IPFSClient:
             self.last_error = f"Error uploading to Pinata: {e}"
             logger.error(self.last_error)
             return None
-    
-    def get_json(self, ipfs_hash: str) -> Optional[Dict[str, Any]]:
-        
-        try:
-            if not self.gateway_url:
-                logger.error("Cannot read IPFS metadata: IPFS_GATEWAY_URL is not configured")
-                return None
-            url = f"{self.gateway_url}{ipfs_hash}"
-            response = requests.get(url, timeout=10)
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.error(f"Failed to retrieve from IPFS: {response.status_code}")
-                return None
-        
-        except requests.exceptions.JSONDecodeError:
-            logger.error(f"Retrieved content is not valid JSON")
-            return None
-        except Exception as e:
-            logger.error(f"Error retrieving from IPFS: {e}")
-            return None
-    
-    def get_file_url(self, ipfs_hash: str) -> str:
-        if not self.gateway_url:
-            raise RuntimeError("IPFS_GATEWAY_URL is not configured")
-        return f"{self.gateway_url}{ipfs_hash}"
 
 
 # Global instance
@@ -153,8 +123,3 @@ def upload_topic_metadata(title: str, description: str) -> str:
     if not ipfs_hash:
         raise RuntimeError(ipfs.last_error or "IPFS upload failed")
     return ipfs_hash
-
-
-def get_topic_metadata(ipfs_hash: str) -> Optional[Dict[str, Any]]:
-    ipfs = get_ipfs_client()
-    return ipfs.get_json(ipfs_hash)

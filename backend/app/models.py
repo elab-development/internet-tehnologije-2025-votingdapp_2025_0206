@@ -29,19 +29,6 @@ class TopicStatus(enum.Enum):
 # Tabele
 
 
-# class Membership(Base):
-#     __tablename__ = "memberships"
-#
-#     id = Column(Integer, primary_key=True, index=True)
-#     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-#     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
-#     role = Column(Enum(UserRole), default=UserRole.USER)
-#
-#     user = relationship("User", back_populates="memberships")
-#     group = relationship("Group", back_populates="memberships")
-#
-#     __table_args__ = (UniqueConstraint("user_id", "group_id"),)
-
 # Korisnik
 class User(Base):
     __tablename__ = "users"

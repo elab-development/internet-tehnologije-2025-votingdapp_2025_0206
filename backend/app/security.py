@@ -3,8 +3,7 @@ from jose import jwt
 from eth_account.messages import encode_defunct
 from web3 import Web3
 import os
-from dotenv import load_dotenv
-from pathlib import Path
+import logging
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from . import models, database
@@ -42,8 +41,8 @@ def verify_signature(wallet_address: str, signature: str):
         
         # Ako je adresa koju smo dobili iz potpisa ista kao ona koju korisnik poseduje, onda je to to
         return recovered_address.lower() == wallet_address.lower()
-    except Exception as e:
-        print(f"Greška pri verifikaciji: {e}")
+    except Exception:
+        logger.warning("MetaMask signature verification failed")
         return False
 
 # Funkcija za proveru tokena 

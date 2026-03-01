@@ -1,10 +1,9 @@
 import os
-import json
+import logging
 from web3 import Web3
 from typing import Optional, List, Dict, Any
 
-# Get contract ABIs - these should be in the contracts directory
-CONTRACT_DIR = os.path.join(os.path.dirname(__file__), '../contracts')
+logger = logging.getLogger(__name__)
 
 class ContractService:
     
@@ -24,7 +23,7 @@ class ContractService:
             self.group_factory_abi = self._get_group_factory_abi()
             self.group_abi = self._get_group_abi()
         except Exception as e:
-            print(f"Warning: Could not load ABIs: {e}")
+            logger.warning("Could not load ABIs: %s", e)
             self.group_factory_abi = []
             self.group_abi = []
     
@@ -120,6 +119,13 @@ class ContractService:
                 "type": "function"
             },
             {
+                "inputs": [{"internalType": "uint256", "name": "topicId", "type": "uint256"}],
+                "name": "finalize",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
                 "inputs": [
                     {"internalType": "uint256", "name": "topicId", "type": "uint256"},
                     {"internalType": "uint8", "name": "choice", "type": "uint8"}
@@ -146,38 +152,14 @@ class ContractService:
             abi=self.group_abi
         )
     
-    def listen_to_group_factory_events(self, from_block: int = 'latest'):
-        try:
-            contract = self.get_group_factory_contract()
-            event_filter = contract.events.GroupCreated.create_filter(from_block=from_block)
-            return event_filter
-        except Exception as e:
-            print(f"Error creating event filter: {e}")
-            return None
-    
     def get_group_factory_events(self, from_block: int, to_block: int = 'latest'):
         try:
             contract = self.get_group_factory_contract()
             events = contract.events.GroupCreated.get_logs(from_block=from_block, to_block=to_block)
             return events
         except Exception as e:
-            print(f"Error fetching events: {e}")
+            logger.error("Error fetching GroupCreated events: %s", e)
             return []
-    
-    def listen_to_group_events(self, group_address: str, from_block: int = 'latest'):
-        try:
-            contract = self.get_group_contract(group_address)
-            event_filters = {
-                'MemberAdded': contract.events.MemberAdded.create_filter(from_block=from_block),
-                'MemberRemoved': contract.events.MemberRemoved.create_filter(from_block=from_block),
-                'TopicCreated': contract.events.TopicCreated.create_filter(from_block=from_block),
-                'VoteCast': contract.events.VoteCast.create_filter(from_block=from_block),
-                'TopicFinalized': contract.events.TopicFinalized.create_filter(from_block=from_block),
-            }
-            return event_filters
-        except Exception as e:
-            print(f"Error creating event filters for group: {e}")
-            return {}
     
     def get_group_events(self, group_address: str, from_block: int, to_block: int = 'latest'):
         try:
@@ -191,7 +173,7 @@ class ContractService:
             }
             return events
         except Exception as e:
-            print(f"Error fetching group events: {e}")
+            logger.error("Error fetching group events for %s: %s", group_address, e)
             return {}
     
     def get_latest_block(self) -> int:
@@ -228,6 +210,77 @@ class ContractService:
         return {
             "group_address": group_address,
             "admin_address": admin_address,
+        }
+
+    def _get_successful_receipt(self, tx_hash: str):
+        if not tx_hash:
+            raise ValueError("transaction_hash is required")
+
+        receipt = self.w3.eth.get_transaction_receipt(tx_hash)
+        if not receipt:
+            raise ValueError("Transaction receipt not found")
+
+        status = receipt.get("status")
+        if status in (0, False):
+            raise ValueError("Blockchain transaction failed")
+
+        return receipt
+
+    def resolve_vote_cast_from_tx(self, tx_hash: str) -> Dict[str, Any]:
+        receipt = self._get_successful_receipt(tx_hash)
+
+        contract_address = receipt.get("to")
+        if not contract_address:
+            raise ValueError("Missing contract address in transaction receipt")
+
+        group = self.get_group_contract(contract_address)
+        events = group.events.VoteCast().process_receipt(receipt)
+        if not events:
+            raise ValueError("VoteCast event not found in transaction receipt")
+        finalized_events = group.events.TopicFinalized().process_receipt(receipt)
+
+        event = events[0]
+        args = event["args"]
+        tx = self.w3.eth.get_transaction(tx_hash)
+
+        finalized_result = None
+        for finalized_event in finalized_events:
+            finalized_args = finalized_event["args"]
+            if int(finalized_args["topicId"]) == int(args["topicId"]):
+                finalized_result = int(finalized_args["result"])
+                break
+
+        return {
+            "contract_address": Web3.to_checksum_address(contract_address),
+            "topic_id": int(args["topicId"]),
+            "voter_address": Web3.to_checksum_address(args["voter"]),
+            "vote": int(args["vote"]),
+            "finalized": finalized_result is not None,
+            "finalize_result": finalized_result,
+            "sender_address": Web3.to_checksum_address(tx["from"]),
+        }
+
+    def resolve_topic_finalized_from_tx(self, tx_hash: str) -> Dict[str, Any]:
+        receipt = self._get_successful_receipt(tx_hash)
+
+        contract_address = receipt.get("to")
+        if not contract_address:
+            raise ValueError("Missing contract address in transaction receipt")
+
+        group = self.get_group_contract(contract_address)
+        events = group.events.TopicFinalized().process_receipt(receipt)
+        if not events:
+            raise ValueError("TopicFinalized event not found in transaction receipt")
+
+        event = events[0]
+        args = event["args"]
+        tx = self.w3.eth.get_transaction(tx_hash)
+
+        return {
+            "contract_address": Web3.to_checksum_address(contract_address),
+            "topic_id": int(args["topicId"]),
+            "result": int(args["result"]),
+            "sender_address": Web3.to_checksum_address(tx["from"]),
         }
 
 

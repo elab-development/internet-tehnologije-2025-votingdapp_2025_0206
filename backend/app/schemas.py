@@ -14,14 +14,6 @@ class Token(BaseModel):
     token_type: str
     user_role: UserRole
 
-# Prikazivanje korisnika kad ga traze pomocu API
-class Membership(BaseModel):
-    group_id: int
-    role: UserRole
-
-    class Config:
-        from_attributes = True
-
 class UserDisplay(BaseModel):
     id: int
     wallet_address: str
@@ -64,6 +56,7 @@ class TopicStatusUpdate(BaseModel):
     on_chain_topic_id: Optional[int] = None
     contract_address: Optional[str] = None
     ipfs_hash: Optional[str] = None
+    transaction_hash: Optional[str] = None
 
 # Za prikazivanje rezultata
 class TopicResults(BaseModel):
@@ -97,3 +90,6 @@ class Topic(BaseModel):
 class VoteCreate(BaseModel):
     topic_id: int
     decision: str # "YES", "NO", "ABSTAIN"
+    transaction_hash: Optional[str] = None
+    contract_address: Optional[str] = None
+    on_chain_topic_id: Optional[int] = None

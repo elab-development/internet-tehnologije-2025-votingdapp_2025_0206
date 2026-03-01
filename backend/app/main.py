@@ -28,7 +28,7 @@ def home():
 
 
 @app.post("/ipfs/upload")
-def upload_to_ipfs(payload: dict, current_user: dict = Depends(security.get_current_user)):
+def upload_to_ipfs(payload: dict, _current_user: dict = Depends(security.get_current_user)):
     title = payload.get("title")
     description = payload.get("description")
 
@@ -82,9 +82,9 @@ def login(login_data: schemas.UserLogin, db: Session = Depends(database.get_db))
             "token_type": "bearer",
             "user_role": user.role
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        # Ovo nam služi da vidimo grešku (ako pukne)
-        print(f"Greška: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/me", response_model=schemas.UserDisplay)
@@ -119,8 +119,6 @@ def create_group(
     current_user: dict = Depends(security.get_current_user), # Ovo proverava token
     db: Session = Depends(database.get_db)
 ):
-    print(f"Zahtev od: {current_user['wallet_address']} sa ulogom {current_user['role']}")
-
     admin_wallet = current_user["wallet_address"].lower()
     user = db.query(models.User).filter(
         func.lower(models.User.wallet_address) == admin_wallet
@@ -385,11 +383,54 @@ def update_topic_status(
         raise HTTPException(status_code=403, detail="Niste vlasnik ove grupe!")
 
     # Azuriranje statusa
-    # Mapiramo string u Enum (active - ACTIVE, closed - CLOSED)
     if status == "active":
         topic.status = models.TopicStatus.ACTIVE
     elif status == "closed":
+        if not payload or not payload.transaction_hash:
+            raise HTTPException(
+                status_code=400,
+                detail="transaction_hash je obavezan za zatvaranje teme"
+            )
+
+        try:
+            event_data = get_contract_service().resolve_topic_finalized_from_tx(payload.transaction_hash)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Neuspešna provera finalize transakcije: {e}")
+
+        chain_contract_address = event_data["contract_address"].lower()
+        chain_topic_id = event_data["topic_id"]
+        tx_sender = event_data["sender_address"].lower()
+
+        expected_contract_address = (
+            payload.contract_address.lower()
+            if payload.contract_address
+            else (topic.contract_address.lower() if topic.contract_address else None)
+        )
+        if not expected_contract_address and group.contract_address:
+            expected_contract_address = group.contract_address.lower()
+
+        if expected_contract_address and chain_contract_address != expected_contract_address:
+            raise HTTPException(status_code=400, detail="Finalize transakcija nije za očekivani grupni ugovor")
+
+        expected_topic_id = (
+            payload.on_chain_topic_id
+            if payload and payload.on_chain_topic_id is not None
+            else topic.on_chain_topic_id
+        )
+        if expected_topic_id is not None and chain_topic_id != expected_topic_id:
+            raise HTTPException(status_code=400, detail="Finalize transakcija nije za očekivanu temu")
+
+        if tx_sender != current_user["wallet_address"].lower():
+            raise HTTPException(status_code=403, detail="Finalize transakciju mora poslati prijavljeni admin")
+
         topic.status = models.TopicStatus.CLOSED
+        topic.finalized = True
+        topic.result = event_data["result"]
+        topic.contract_address = chain_contract_address
+        if topic.on_chain_topic_id is None:
+            topic.on_chain_topic_id = chain_topic_id
     else:
         raise HTTPException(status_code=400, detail="Nepoznat status")
 
@@ -425,6 +466,12 @@ def cast_vote(
     if topic.status != models.TopicStatus.ACTIVE:
         raise HTTPException(status_code=400, detail="Glasanje nije aktivno za ovu temu")
 
+    if topic.on_chain_topic_id is not None and topic.contract_address and not vote.transaction_hash:
+        raise HTTPException(
+            status_code=400,
+            detail="Za on-chain temu je obavezan transaction_hash glasanja"
+        )
+
     # Proveri da li je korisnik vec glasao
     existing_vote = db.query(models.Vote).filter(
         models.Vote.user_id == user.id,
@@ -434,11 +481,71 @@ def cast_vote(
     if existing_vote:
         raise HTTPException(status_code=400, detail="Već ste glasali na ovu temu!")
 
-    # Map string decision to enum
-    try:
-        vote_option = models.VoteOption[vote.decision.upper()]
-    except KeyError:
-        raise HTTPException(status_code=400, detail="Nevažeća odluka. Koristi: YES, NO, ABSTAIN")
+    vote_option = None
+    if vote.transaction_hash:
+        try:
+            chain_vote = get_contract_service().resolve_vote_cast_from_tx(vote.transaction_hash)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Neuspešna provera vote transakcije: {e}")
+
+        chain_contract = chain_vote["contract_address"].lower()
+        chain_topic_id = chain_vote["topic_id"]
+        chain_voter = chain_vote["voter_address"].lower()
+        tx_sender = chain_vote["sender_address"].lower()
+
+        if chain_voter != current_user["wallet_address"].lower():
+            raise HTTPException(status_code=403, detail="Vote događaj nije vezan za prijavljenog korisnika")
+
+        if tx_sender != current_user["wallet_address"].lower():
+            raise HTTPException(status_code=403, detail="Vote transakciju mora poslati prijavljeni korisnik")
+
+        expected_contract = (
+            vote.contract_address.lower()
+            if vote.contract_address
+            else (topic.contract_address.lower() if topic.contract_address else None)
+        )
+        if expected_contract and chain_contract != expected_contract:
+            raise HTTPException(status_code=400, detail="Vote transakcija nije za očekivani ugovor grupe")
+
+        expected_on_chain_topic_id = (
+            vote.on_chain_topic_id
+            if vote.on_chain_topic_id is not None
+            else topic.on_chain_topic_id
+        )
+        if expected_on_chain_topic_id is not None and chain_topic_id != expected_on_chain_topic_id:
+            raise HTTPException(status_code=400, detail="Vote transakcija nije za očekivanu temu")
+
+        vote_map = {
+            0: models.VoteOption.YES,
+            1: models.VoteOption.NO,
+            2: models.VoteOption.ABSTAIN
+        }
+        vote_option = vote_map.get(chain_vote["vote"])
+        if vote_option is None:
+            raise HTTPException(status_code=400, detail="Nevažeća vrednost glasa iz blockchain događaja")
+
+        try:
+            requested_vote_option = models.VoteOption[vote.decision.upper()]
+        except KeyError:
+            raise HTTPException(status_code=400, detail="Nevažeća odluka. Koristi: YES, NO, ABSTAIN")
+        if requested_vote_option != vote_option:
+            raise HTTPException(status_code=400, detail="Prosleđena odluka se ne poklapa sa blockchain događajem")
+
+        topic.contract_address = chain_contract
+        if topic.on_chain_topic_id is None:
+            topic.on_chain_topic_id = chain_topic_id
+        if chain_vote.get("finalized"):
+            topic.status = models.TopicStatus.CLOSED
+            topic.finalized = True
+            topic.result = chain_vote.get("finalize_result")
+    else:
+        # Backward compatible fallback (non-blockchain vote)
+        try:
+            vote_option = models.VoteOption[vote.decision.upper()]
+        except KeyError:
+            raise HTTPException(status_code=400, detail="Nevažeća odluka. Koristi: YES, NO, ABSTAIN")
 
     # Na kraju upisi glas
     new_vote = models.Vote(

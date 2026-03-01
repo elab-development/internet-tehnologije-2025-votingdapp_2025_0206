@@ -6,6 +6,7 @@ import { connectWallet } from "../services/web3";
 import {
   addMemberToGroup,
   createTopic as createTopicOnChain,
+  finalizeTopic as finalizeTopicOnChain,
   removeMemberFromGroup,
 } from "../services/contractServise";
 import { uploadTopicMetadata } from "../services/ipfsService";
@@ -16,6 +17,7 @@ function Dashboard() {
   const [managedGroups, setManagedGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [approvingTopicId, setApprovingTopicId] = useState(null);
+  const [closingTopicId, setClosingTopicId] = useState(null);
   const [memberAddress, setMemberAddress] = useState("");
   const [selectedGroupAddress, setSelectedGroupAddress] = useState("");
   const [memberActionLoading, setMemberActionLoading] = useState(null);
@@ -29,8 +31,8 @@ function Dashboard() {
         return order[a.status] - order[b.status];
       });
       setTopics(sorted);
-    } catch (error) {
-      console.error("Greška pri učitavanju tema:", error);
+    } catch {
+      setMessage("Greška pri učitavanju tema.");
     }
   };
 
@@ -38,8 +40,8 @@ function Dashboard() {
     try {
       const data = await getMyGroups();
       setManagedGroups(data || []);
-    } catch (error) {
-      console.error("Greška pri učitavanju grupa:", error);
+    } catch {
+      setMessage("Greška pri učitavanju grupa.");
       setManagedGroups([]);
     }
   };
@@ -159,13 +161,42 @@ function Dashboard() {
     }
   };
 
-  const handleFinish = async (temaID) => {
+  const handleFinish = async (topic) => {
     if (!window.confirm("Završiti glasanje za ovu temu?")) return;
+    if (!topic?.contract_address) {
+      setMessage("Tema nema adresu ugovora grupe.");
+      return;
+    }
+    if (!Number.isInteger(topic?.on_chain_topic_id)) {
+      setMessage("Tema nema on-chain topic ID, nije moguće finalizovati.");
+      return;
+    }
+
     try {
-      await updateTopicStatus(temaID, "closed");
+      setClosingTopicId(topic.id);
+      setMessage("");
+
+      const account = await getValidatedAdminAccount();
+      const { txHash } = await finalizeTopicOnChain(
+        topic.contract_address,
+        topic.on_chain_topic_id,
+        account
+      );
+
+      await updateTopicStatus(topic.id, "closed", {
+        transaction_hash: txHash,
+        contract_address: topic.contract_address,
+        on_chain_topic_id: topic.on_chain_topic_id,
+      });
+
+      setMessage(`Tema zatvorena on-chain. Tx: ${txHash?.slice(0, 12)}...`);
       await loadTopics();
     } catch (err) {
-      alert("Greška: " + err.response?.data?.detail);
+      const detail = err?.response?.data?.detail || err?.message || "Nepoznata greška";
+      alert("Greška: " + detail);
+      setMessage(`Greška: ${detail}`);
+    } finally {
+      setClosingTopicId(null);
     }
   };
 
@@ -380,10 +411,15 @@ function Dashboard() {
 
                   {t.status === "active" && (
                     <button
-                      onClick={() => handleFinish(t.id)}
-                      className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition"
+                      onClick={() => handleFinish(t)}
+                      disabled={closingTopicId === t.id}
+                      className={`text-white px-3 py-1 rounded text-sm transition ${
+                        closingTopicId === t.id
+                          ? "bg-red-300 cursor-not-allowed"
+                          : "bg-red-500 hover:bg-red-600"
+                      }`}
                     >
-                      Završi Glasanje
+                      {closingTopicId === t.id ? "Finalizujem..." : "Završi Glasanje"}
                     </button>
                   )}
 

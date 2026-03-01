@@ -32,8 +32,7 @@ export function AuthProvider({ children }) {
         groupName: null,
       });
       sessionStorage.setItem("voting_token", token);
-    } catch (error) {
-      console.error("Loš token", error);
+    } catch {
       logout();
     }
   }, [logout]);
@@ -48,8 +47,7 @@ export function AuthProvider({ children }) {
         groupId: currentUser.group_id ?? null,
         groupName: currentUser.group_name ?? null,
       }));
-    } catch (error) {
-      console.error("Neuspešno osvežavanje korisnika", error);
+    } catch {
       logout();
     }
   }, [logout]);
@@ -89,7 +87,7 @@ export function AuthProvider({ children }) {
     window.ethereum
       .request({ method: "eth_accounts" })
       .then(handleAccountsChanged)
-      .catch((error) => console.error("Neuspešno čitanje MetaMask naloga:", error));
+      .catch(() => {});
 
     window.ethereum.on("accountsChanged", handleAccountsChanged);
 

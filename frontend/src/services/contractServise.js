@@ -14,243 +14,78 @@ const initWeb3IfNeeded = () => {
 };
 
 export const createGroupOnBlockchain = async (accountAddress) => {
-  try {
-    web3 = initWeb3IfNeeded();
-    
-    const factoryAddress = process.env.REACT_APP_GROUP_FACTORY_CONTRACT_ADDRESS;
-    if (!factoryAddress) {
-      throw new Error("REACT_APP_GROUP_FACTORY_CONTRACT_ADDRESS is not configured");
-    }
-    
-    const factory = new web3.eth.Contract(groupFactoryABI.abi, factoryAddress);
-    
-    // Encode the function call
-    const data = factory.methods.createGroup().encodeABI();
-    
-    // Send transaction
-    const txHash = await sendTransaction(
-      accountAddress,
-      factoryAddress,
-      data
-    );
-    
-    let groupAddress = null;
-    let receipt = null;
-    // Receipt parsing is best-effort; backend still verifies txHash and can keep pending row.
-    try {
-      receipt = await waitForTransactionConfirmation(txHash);
-      try {
-        groupAddress = parseGroupCreatedEvent(factory, receipt);
-      } catch (parseError) {
-        console.warn("GroupCreated parse warning:", parseError);
-      }
-    } catch (confirmationError) {
-      console.warn("Receipt wait warning:", confirmationError);
-    }
-    
-    return {
-      txHash,
-      groupAddress,
-      receipt
-    };
-  } catch (error) {
-    console.error("Error creating group on blockchain:", error);
-    throw error;
+  web3 = initWeb3IfNeeded();
+
+  const factoryAddress = process.env.REACT_APP_GROUP_FACTORY_CONTRACT_ADDRESS;
+  if (!factoryAddress) {
+    throw new Error("REACT_APP_GROUP_FACTORY_CONTRACT_ADDRESS is not configured");
   }
+
+  const factory = new web3.eth.Contract(groupFactoryABI.abi, factoryAddress);
+  const data = factory.methods.createGroup().encodeABI();
+  const txHash = await sendTransaction(accountAddress, factoryAddress, data);
+
+  let groupAddress = null;
+  try {
+    const receipt = await waitForTransactionConfirmation(txHash);
+    groupAddress = parseGroupCreatedEvent(factory, receipt);
+  } catch {
+    groupAddress = null;
+  }
+
+  return {
+    txHash,
+    groupAddress
+  };
 };
 
 export const addMemberToGroup = async (groupAddress, memberAddress, adminAddress) => {
-  try {
-    web3 = initWeb3IfNeeded();
-    
-    const group = new web3.eth.Contract(groupABI.abi, groupAddress);
-    
-    // Encode the function call
-    const data = group.methods.addMember(memberAddress).encodeABI();
-    
-    // Send transaction
-    const txHash = await sendTransaction(
-      adminAddress,
-      groupAddress,
-      data
-    );
-    
-    // Wait for confirmation
-    const receipt = await waitForTransactionConfirmation(txHash);
-    
-    return {
-      txHash,
-      receipt
-    };
-  } catch (error) {
-    console.error("Error adding member to group:", error);
-    throw error;
-  }
+  web3 = initWeb3IfNeeded();
+  const group = new web3.eth.Contract(groupABI.abi, groupAddress);
+  const data = group.methods.addMember(memberAddress).encodeABI();
+  const txHash = await sendTransaction(adminAddress, groupAddress, data);
+  await waitForTransactionConfirmation(txHash);
+  return { txHash };
 };
 
 export const removeMemberFromGroup = async (groupAddress, memberAddress, adminAddress) => {
-  try {
-    web3 = initWeb3IfNeeded();
-    
-    const group = new web3.eth.Contract(groupABI.abi, groupAddress);
-    
-    // Encode the function call
-    const data = group.methods.removeMember(memberAddress).encodeABI();
-    
-    // Send transaction
-    const txHash = await sendTransaction(
-      adminAddress,
-      groupAddress,
-      data
-    );
-    
-    // Wait for confirmation
-    const receipt = await waitForTransactionConfirmation(txHash);
-    
-    return {
-      txHash,
-      receipt
-    };
-  } catch (error) {
-    console.error("Error removing member from group:", error);
-    throw error;
-  }
+  web3 = initWeb3IfNeeded();
+  const group = new web3.eth.Contract(groupABI.abi, groupAddress);
+  const data = group.methods.removeMember(memberAddress).encodeABI();
+  const txHash = await sendTransaction(adminAddress, groupAddress, data);
+  await waitForTransactionConfirmation(txHash);
+  return { txHash };
 };
 
 export const createTopic = async (groupAddress, ipfsHash, adminAddress) => {
-  try {
-    web3 = initWeb3IfNeeded();
-    const checksumGroupAddress = web3.utils.toChecksumAddress(groupAddress);
-    const group = new web3.eth.Contract(groupABI.abi, checksumGroupAddress);
-    
-    // Encode the function call
-    const data = group.methods.createTopic(ipfsHash).encodeABI();
-    
-    // Send transaction
-    const txHash = await sendTransaction(
-      adminAddress,
-      checksumGroupAddress,
-      data
-    );
-    
-    // Wait for confirmation
-    const receipt = await waitForTransactionConfirmation(txHash);
-    
-    // Parse the logs to get the topic ID
-    const topicId = parseTopicCreatedEvent(group, receipt);
-    
-    return {
-      txHash,
-      topicId,
-      receipt
-    };
-  } catch (error) {
-    console.error("Error creating topic:", error);
-    throw error;
-  }
+  web3 = initWeb3IfNeeded();
+  const checksumGroupAddress = web3.utils.toChecksumAddress(groupAddress);
+  const group = new web3.eth.Contract(groupABI.abi, checksumGroupAddress);
+  const data = group.methods.createTopic(ipfsHash).encodeABI();
+  const txHash = await sendTransaction(adminAddress, checksumGroupAddress, data);
+  const receipt = await waitForTransactionConfirmation(txHash);
+  const topicId = parseTopicCreatedEvent(group, receipt);
+  return { txHash, topicId };
 };
 
 export const castVote = async (groupAddress, topicId, choice, voterAddress) => {
-  try {
-    web3 = initWeb3IfNeeded();
-    
-    const group = new web3.eth.Contract(groupABI.abi, groupAddress);
-    
-    // Encode the function call
-    const data = group.methods.vote(topicId, choice).encodeABI();
-    
-    // Send transaction
-    const txHash = await sendTransaction(
-      voterAddress,
-      groupAddress,
-      data
-    );
-    
-    // Wait for confirmation
-    const receipt = await waitForTransactionConfirmation(txHash);
-    
-    return {
-      txHash,
-      receipt
-    };
-  } catch (error) {
-    console.error("Error casting vote:", error);
-    throw error;
-  }
+  web3 = initWeb3IfNeeded();
+  const checksumGroupAddress = web3.utils.toChecksumAddress(groupAddress);
+  const group = new web3.eth.Contract(groupABI.abi, checksumGroupAddress);
+  const data = group.methods.vote(topicId, choice).encodeABI();
+  const txHash = await sendTransaction(voterAddress, checksumGroupAddress, data);
+  await waitForTransactionConfirmation(txHash);
+  return { txHash };
 };
 
-export const getGroupInfo = async (groupAddress) => {
-  try {
-    web3 = initWeb3IfNeeded();
-    
-    const group = new web3.eth.Contract(groupABI.abi, groupAddress);
-    
-    const admin = await group.methods.admin().call();
-    const memberCount = await group.methods.memberCount().call();
-    const topicCount = await group.methods.topicCount().call();
-    
-    return {
-      admin,
-      memberCount: parseInt(memberCount),
-      topicCount: parseInt(topicCount)
-    };
-  } catch (error) {
-    console.error("Error getting group info:", error);
-    throw error;
-  }
-};
-
-export const getTopicInfo = async (groupAddress, topicId) => {
-  try {
-    web3 = initWeb3IfNeeded();
-    
-    const group = new web3.eth.Contract(groupABI.abi, groupAddress);
-    
-    const topic = await group.methods.topics(topicId).call();
-    
-    return {
-      metadataURI: topic.metadataURI,
-      votersCount: parseInt(topic.votersCount),
-      votesYes: parseInt(topic.votesYes),
-      votesNo: parseInt(topic.votesNo),
-      votesAbstain: parseInt(topic.votesAbstain),
-      finalized: topic.finalized,
-      result: parseInt(topic.result)
-    };
-  } catch (error) {
-    console.error("Error getting topic info:", error);
-    throw error;
-  }
-};
-
-export const isMember = async (groupAddress, memberAddress) => {
-  try {
-    web3 = initWeb3IfNeeded();
-    
-    const group = new web3.eth.Contract(groupABI.abi, groupAddress);
-    
-    const member = await group.methods.members(memberAddress).call();
-    
-    return member.exists;
-  } catch (error) {
-    console.error("Error checking membership:", error);
-    throw error;
-  }
-};
-
-export const hasVoted = async (groupAddress, topicId, voterAddress) => {
-  try {
-    web3 = initWeb3IfNeeded();
-    
-    const group = new web3.eth.Contract(groupABI.abi, groupAddress);
-    
-    const topic = await group.methods.topics(topicId).call();
-    
-    return topic.voted[voterAddress] || false;
-  } catch (error) {
-    console.error("Error checking vote status:", error);
-    throw error;
-  }
+export const finalizeTopic = async (groupAddress, topicId, adminAddress) => {
+  web3 = initWeb3IfNeeded();
+  const checksumGroupAddress = web3.utils.toChecksumAddress(groupAddress);
+  const group = new web3.eth.Contract(groupABI.abi, checksumGroupAddress);
+  const data = group.methods.finalize(topicId).encodeABI();
+  const txHash = await sendTransaction(adminAddress, checksumGroupAddress, data);
+  await waitForTransactionConfirmation(txHash);
+  return { txHash };
 };
 
 const parseGroupCreatedEvent = (factory, receipt) => {
@@ -320,16 +155,3 @@ const parseTopicCreatedEvent = (group, receipt) => {
 
   return parseInt(decoded.topicId, 10);
 };
-
-const groupService = {
-  createGroupOnBlockchain,
-  addMemberToGroup,
-  removeMemberFromGroup,
-  createTopic,
-  castVote,
-  getGroupInfo,
-  getTopicInfo,
-  isMember,
-  hasVoted
-};
-export default groupService;

@@ -12,8 +12,8 @@ function History() {
         // Filtriramo samo završene teme
         const filtered = data.filter(topic => topic.status === 'closed');
         setClosedTopics(filtered);
-      } catch (error) {
-        console.error("Greška pri učitavanju arhive:", error);
+      } catch {
+        setClosedTopics([]);
       } finally {
         setLoading(false);
       }

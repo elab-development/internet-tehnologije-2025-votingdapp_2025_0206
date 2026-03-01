@@ -61,8 +61,18 @@ export const updateTopicStatus = async (topicId, status, payload = null) => {
 };
 
 // Funkcija koja proverava glas(YES", "NO" ili "ABSTAIN)
-export const castVote = async (topicId, decision) => {
-  return apiClient.post("/votes", { topic_id: topicId, decision });
+export const castVote = async (topicId, decision, payload = null) => {
+  const body = { topic_id: topicId, decision };
+  if (payload?.transaction_hash) {
+    body.transaction_hash = payload.transaction_hash;
+  }
+  if (payload?.contract_address) {
+    body.contract_address = payload.contract_address;
+  }
+  if (payload?.on_chain_topic_id !== undefined && payload?.on_chain_topic_id !== null) {
+    body.on_chain_topic_id = payload.on_chain_topic_id;
+  }
+  return apiClient.post("/votes", body);
 };
 
 export default apiClient;
