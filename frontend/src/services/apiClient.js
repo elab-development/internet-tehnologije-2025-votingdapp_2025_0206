@@ -40,6 +40,12 @@ export const getTopics = async () => {
   return response.data;
 };
 
+// Dohvati grupe kojima je prijavljeni korisnik admin
+export const getMyGroups = async () => {
+  const response = await apiClient.get("/groups/mine");
+  return response.data;
+};
+
 // Funkcija za predlaganje teme
 export const createTopic = async (title, description) => {
   return apiClient.post("/topics", { title, description });

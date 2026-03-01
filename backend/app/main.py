@@ -121,12 +121,6 @@ def create_group(
 ):
     print(f"Zahtev od: {current_user['wallet_address']} sa ulogom {current_user['role']}")
 
-    # Da li grupa već postoji? (Po imenu ili šifri)
-    existing_group = db.query(models.Group).filter((models.Group.name == group.name) | (models.Group.access_code == group.access_code)).first()
-    
-    if existing_group:
-        raise HTTPException(status_code=400, detail="Grupa sa tim imenom ili šifrom već postoji")
-
     admin_wallet = current_user["wallet_address"].lower()
     user = db.query(models.User).filter(
         func.lower(models.User.wallet_address) == admin_wallet
@@ -195,7 +189,29 @@ def create_group(
         func.lower(models.Group.contract_address) == resolved_contract_address.lower()
     ).first()
     if existing_contract:
-        raise HTTPException(status_code=400, detail="Grupa za ovaj smart contract već postoji")
+        if existing_contract.admin_wallet.lower() != admin_wallet:
+            raise HTTPException(status_code=400, detail="Grupa za ovaj smart contract već postoji")
+
+        conflicting_group = db.query(models.Group).filter(
+            models.Group.id != existing_contract.id,
+            (models.Group.name == group.name) | (models.Group.access_code == group.access_code)
+        ).first()
+        if conflicting_group:
+            raise HTTPException(status_code=400, detail="Grupa sa tim imenom ili šifrom već postoji")
+
+        user.role = models.UserRole.ADMIN
+        existing_contract.name = group.name
+        existing_contract.access_code = group.access_code
+        db.commit()
+        db.refresh(existing_contract)
+        return existing_contract
+
+    # Da li grupa već postoji? (Po imenu ili šifri)
+    existing_group = db.query(models.Group).filter(
+        (models.Group.name == group.name) | (models.Group.access_code == group.access_code)
+    ).first()
+    if existing_group:
+        raise HTTPException(status_code=400, detail="Grupa sa tim imenom ili šifrom već postoji")
 
     # Kad zavrsi, upisuju se u bazu
     user.role = models.UserRole.ADMIN
@@ -241,6 +257,20 @@ def join_group(
     
     return {"message": f"Uspešno ste pristupili grupi: {group.name}",
             "contract_address": group.contract_address}
+
+
+@app.get("/groups/mine", response_model=list[schemas.Group])
+def get_my_groups(
+    current_user: dict = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    if current_user["role"].lower() != "admin":
+        return []
+
+    wallet = current_user["wallet_address"].lower()
+    return db.query(models.Group).filter(
+        func.lower(models.Group.admin_wallet) == wallet
+    ).all()
 
 
 # Ruta za kreiranje teme
