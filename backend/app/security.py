@@ -41,8 +41,8 @@ def verify_signature(wallet_address: str, signature: str):
         
         # Ako je adresa koju smo dobili iz potpisa ista kao ona koju korisnik poseduje, onda je to to
         return recovered_address.lower() == wallet_address.lower()
-    except Exception:
-        logger.warning("MetaMask signature verification failed")
+    except Exception as e:
+        print(f"Greška pri verifikaciji: {e}")
         return False
 
 # Funkcija za proveru tokena 

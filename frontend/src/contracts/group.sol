@@ -122,7 +122,7 @@ contract Group {
 
 
 
-        require(!t.voted[msg.sender]);
+        require(!t.voted[msg.sender], "Already voted");
 
         t.voted[msg.sender] = true;
 

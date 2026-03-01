@@ -49,8 +49,8 @@ export const waitForTransactionConfirmation = async (txHash) => {
       receipt = await web3.eth.getTransactionReceipt(txHash);
     } catch (error) {
       const msg = (error?.message || "").toLowerCase();
-      // Some providers temporarily return "transaction not found" right after broadcast.
-      if (msg.includes("transaction not found") || msg.includes("not found")) {
+      
+      if (msg.includes("not found")) {
         receipt = null;
       } else {
         throw error;

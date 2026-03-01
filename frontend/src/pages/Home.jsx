@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { getTopics, createTopic, joinGroup, castVote } from "../services/apiClient"; // Uvozimo naše funkcije
-import { useAuth } from "../context/AuthContext";
+import { getTopics, createTopic, joinGroup, castVote } from "../services/apiClient";
 import CreateGroup from "../components/CreateGroup";
 import { connectWallet } from "../services/web3";
 import { castVote as castVoteOnChain } from "../services/contractServise";
+import { useAuth } from "../context/AuthContext";
 
 function Home() {
   const { user, walletAccount, refreshUser } = useAuth();

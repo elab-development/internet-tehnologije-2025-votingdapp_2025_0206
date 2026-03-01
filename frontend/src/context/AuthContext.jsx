@@ -32,7 +32,8 @@ export function AuthProvider({ children }) {
         groupName: null,
       });
       sessionStorage.setItem("voting_token", token);
-    } catch {
+    } catch (error) {
+      console.error("Loš token", error);
       logout();
     }
   }, [logout]);
