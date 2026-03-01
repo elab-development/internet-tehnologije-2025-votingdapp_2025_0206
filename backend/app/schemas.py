@@ -27,6 +27,7 @@ class UserDisplay(BaseModel):
     wallet_address: str
     role: UserRole
     group_id: Optional[int] = None
+    group_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -57,6 +58,12 @@ class JoinGroup(BaseModel):
 class TopicCreate(BaseModel):
     title: str
     description: str
+
+
+class TopicStatusUpdate(BaseModel):
+    on_chain_topic_id: Optional[int] = None
+    contract_address: Optional[str] = None
+    ipfs_hash: Optional[str] = None
 
 # Za prikazivanje rezultata
 class TopicResults(BaseModel):

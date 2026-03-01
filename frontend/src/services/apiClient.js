@@ -21,7 +21,8 @@ apiClient.interceptors.request.use((config) => {
 
 // Funkcija za učlanjenje u grupu
 export const joinGroup = async (accessCode) => {
-  return apiClient.post("/join", { access_code: accessCode });
+  const response = await apiClient.post("/join", { access_code: accessCode });
+  return response.data;
 };
 
 // Dohvati informacije o trenutno ulogovanom korisniku.
@@ -42,8 +43,11 @@ export const createTopic = async (title, description) => {
 };
 
 // Funkcija za promenu statusa teme (active ili closed)
-export const updateTopicStatus = async (topicId, status) => {
+export const updateTopicStatus = async (topicId, status, payload = null) => {
   // status mora biti "active" ili "closed"
+  if (payload) {
+    return apiClient.put(`/topics/${topicId}/${status}`, payload);
+  }
   return apiClient.put(`/topics/${topicId}/${status}`);
 };
 

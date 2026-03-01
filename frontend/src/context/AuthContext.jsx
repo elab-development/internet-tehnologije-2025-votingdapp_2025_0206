@@ -6,6 +6,7 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [walletAccount, setWalletAccount] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const normalizeRole = (role) => {
@@ -27,6 +28,8 @@ export function AuthProvider({ children }) {
       setUser({
         walletAddress: decoded.sub,
         uloga: roleCapitalized, // Sada će biti "Admin" ili "User"
+        groupId: null,
+        groupName: null,
       });
       sessionStorage.setItem("voting_token", token);
     } catch (error) {
@@ -39,8 +42,11 @@ export function AuthProvider({ children }) {
     try {
       const currentUser = await getCurrentUser();
       setUser((prev) => ({
+        ...prev,
         walletAddress: currentUser.wallet_address || prev?.walletAddress,
         uloga: normalizeRole(currentUser.role),
+        groupId: currentUser.group_id ?? null,
+        groupName: currentUser.group_name ?? null,
       }));
     } catch (error) {
       console.error("Neuspešno osvežavanje korisnika", error);
@@ -62,13 +68,45 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [processToken, refreshUser]);
 
+  useEffect(() => {
+    if (!window.ethereum) return undefined;
+
+    const handleAccountsChanged = (accounts) => {
+      const nextAccount = accounts?.[0] || null;
+      setWalletAccount(nextAccount);
+
+      // Ako je korisnik promenio nalog u MetaMask-u, izbaci ga iz sesije
+      // da ne ostane token vezan za drugi wallet.
+      if (user?.walletAddress) {
+        const currentUserWallet = user.walletAddress.toLowerCase();
+        const nextWallet = (nextAccount || "").toLowerCase();
+        if (!nextWallet || currentUserWallet !== nextWallet) {
+          logout();
+        }
+      }
+    };
+
+    window.ethereum
+      .request({ method: "eth_accounts" })
+      .then(handleAccountsChanged)
+      .catch((error) => console.error("Neuspešno čitanje MetaMask naloga:", error));
+
+    window.ethereum.on("accountsChanged", handleAccountsChanged);
+
+    return () => {
+      if (window.ethereum?.removeListener) {
+        window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+      }
+    };
+  }, [logout, user?.walletAddress]);
+
   const login = async (token) => {
     processToken(token);
     await refreshUser();
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, refreshUser }}>
+    <AuthContext.Provider value={{ user, walletAccount, login, logout, loading, refreshUser }}>
       {!loading && children}
     </AuthContext.Provider>
   );

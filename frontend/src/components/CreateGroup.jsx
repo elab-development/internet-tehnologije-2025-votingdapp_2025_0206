@@ -41,7 +41,7 @@ function CreateGroup() {
 
       const savedContractAddress = response.data?.contract_address || groupAddress;
       if (savedContractAddress) {
-        setMessage(`Uspeh! Grupa "${name}" je kreirana na ${savedContractAddress}`);
+        setMessage(`Uspeh! Grupa "${name}" je kreirana na ${savedContractAddress.substring(0,10)}`);
       } else {
         setMessage(`Grupa "${name}" je sačuvana. Contract adresa će se dopuniti nakon blockchain sync-a.`);
       }
@@ -66,7 +66,7 @@ function CreateGroup() {
 
   return (
     <div className="bg-white p-6 rounded-xl shadow max-w-md mx-auto mt-6">
-      <h3 className="text-xl font-semibold mb-4 text-gray-800">Kreiranje nove grupe</h3>
+      <h3 className="text-xl font-semibold mb-4 text-gray-800">Napravi novu grupu</h3>
 
       <div className="space-y-4">
         <div>

@@ -120,8 +120,8 @@ export const removeMemberFromGroup = async (groupAddress, memberAddress, adminAd
 export const createTopic = async (groupAddress, ipfsHash, adminAddress) => {
   try {
     web3 = initWeb3IfNeeded();
-    
-    const group = new web3.eth.Contract(groupABI.abi, groupAddress);
+    const checksumGroupAddress = web3.utils.toChecksumAddress(groupAddress);
+    const group = new web3.eth.Contract(groupABI.abi, checksumGroupAddress);
     
     // Encode the function call
     const data = group.methods.createTopic(ipfsHash).encodeABI();
@@ -129,7 +129,7 @@ export const createTopic = async (groupAddress, ipfsHash, adminAddress) => {
     // Send transaction
     const txHash = await sendTransaction(
       adminAddress,
-      groupAddress,
+      checksumGroupAddress,
       data
     );
     
@@ -289,11 +289,36 @@ const parseGroupCreatedEvent = (factory, receipt) => {
 };
 
 const parseTopicCreatedEvent = (group, receipt) => {
-  const events = group.events.TopicCreated.parse(receipt.logs);
-  if (events.length > 0) {
-    return parseInt(events[0].returnValues.topicId);
+  if (!receipt || !receipt.logs) {
+    throw new Error("Missing transaction receipt logs");
   }
-  throw new Error("TopicCreated event not found in transaction receipt");
+
+  if (group?.events?.TopicCreated?.parse) {
+    const events = group.events.TopicCreated.parse(receipt.logs);
+    if (events.length > 0) {
+      return parseInt(events[0].returnValues.topicId, 10);
+    }
+  }
+
+  const eventSignature = web3.eth.abi.encodeEventSignature("TopicCreated(uint256,string)");
+  const eventLog = receipt.logs.find(
+    (log) => Array.isArray(log.topics) && log.topics[0] === eventSignature
+  );
+
+  if (!eventLog) {
+    throw new Error("TopicCreated event not found in transaction receipt");
+  }
+
+  const decoded = web3.eth.abi.decodeLog(
+    [
+      { type: "uint256", name: "topicId", indexed: false },
+      { type: "string", name: "metadataURI", indexed: false },
+    ],
+    eventLog.data,
+    eventLog.topics.slice(1)
+  );
+
+  return parseInt(decoded.topicId, 10);
 };
 
 const groupService = {

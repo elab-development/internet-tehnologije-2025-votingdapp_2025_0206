@@ -31,11 +31,14 @@ def home():
 def upload_to_ipfs(payload: dict, current_user: dict = Depends(security.get_current_user)):
     title = payload.get("title")
     description = payload.get("description")
-    options = payload.get("options", [])
 
-    ipfs_hash = upload_topic_metadata(title, description, options)
-    if not ipfs_hash:
-        raise HTTPException(status_code=500, detail="IPFS upload failed")
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required for IPFS metadata")
+
+    try:
+        ipfs_hash = upload_topic_metadata(title, description)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     return {"ipfs_hash": ipfs_hash}
 
@@ -92,7 +95,22 @@ def read_current_user(
     user = db.query(models.User).filter(
         func.lower(models.User.wallet_address) == current_user["wallet_address"].lower()
     ).first()
-    return user
+    if not user:
+        raise HTTPException(status_code=404, detail="Korisnik nije pronađen")
+
+    group_name = None
+    if user.group_id is not None:
+        group = db.query(models.Group).filter(models.Group.id == user.group_id).first()
+        if group:
+            group_name = group.name
+
+    return {
+        "id": user.id,
+        "wallet_address": user.wallet_address,
+        "role": user.role,
+        "group_id": user.group_id,
+        "group_name": group_name,
+    }
 
 # Ruta za kreiranje grupe
 @app.post("/groups", response_model=schemas.Group)
@@ -238,6 +256,10 @@ def create_topic(
     if not user.group_id:
         raise HTTPException(status_code=400, detail="Morate biti član grupe da biste predložili temu!")
 
+    group = db.query(models.Group).filter(models.Group.id == user.group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Grupa nije pronađena")
+
     # Count members in the group to set voters_count
     voters_count = db.query(models.User).filter(models.User.group_id == user.group_id).count()
 
@@ -247,6 +269,7 @@ def create_topic(
         description=topic.description,
         status=models.TopicStatus.PENDING, # Po defaultu čeka odobrenje
         group_id=user.group_id,
+        contract_address=group.contract_address.lower() if group.contract_address else None,
         voters_count=voters_count
     )
     
@@ -278,8 +301,17 @@ def get_topics(
             return []
         topics = db.query(models.Topic).filter(models.Topic.group_id == user.group_id).all()
 
+    group_contract_cache = {}
+
     # Prebrojavanje glasova za svaku temu
     for topic in topics:
+        if not topic.contract_address:
+            if topic.group_id not in group_contract_cache:
+                group_contract_cache[topic.group_id] = db.query(models.Group.contract_address).filter(
+                    models.Group.id == topic.group_id
+                ).scalar()
+            topic.contract_address = group_contract_cache[topic.group_id]
+
         yes_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == models.VoteOption.YES).count()
         no_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == models.VoteOption.NO).count()
         abstain_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == models.VoteOption.ABSTAIN).count()
@@ -305,6 +337,7 @@ def get_topics(
 def update_topic_status(
     topic_id: int,
     status: str, # "active" ili "closed"
+    payload: schemas.TopicStatusUpdate | None = None,
     current_user: dict = Depends(security.get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -329,6 +362,14 @@ def update_topic_status(
         topic.status = models.TopicStatus.CLOSED
     else:
         raise HTTPException(status_code=400, detail="Nepoznat status")
+
+    if payload:
+        if payload.on_chain_topic_id is not None:
+            topic.on_chain_topic_id = payload.on_chain_topic_id
+        if payload.contract_address:
+            topic.contract_address = payload.contract_address.lower()
+        if payload.ipfs_hash:
+            topic.ipfs_hash = payload.ipfs_hash
 
     db.commit()
     return {"message": f"Status teme promenjen u {status}"}

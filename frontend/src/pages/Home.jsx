@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import CreateGroup from "../components/CreateGroup";
 
 function Home() {
-  const { user } = useAuth();
+  const { user, walletAccount, refreshUser } = useAuth();
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -12,6 +12,7 @@ function Home() {
   const [joinCode, setJoinCode] = useState("");
   const [newTopic, setNewTopic] = useState({ title: "", description: "" });
   const [message, setMessage] = useState("");
+  const [joining, setJoining] = useState(false);
 
   // Učitaj teme čim se stranica otvori
   const loadTopics = async () => {
@@ -30,14 +31,29 @@ function Home() {
   }, []);
 
   // Funkcija za ulazak u grupu
-  const handleJoinGroup = async () => {
+  const handleJoinGroup = async (e) => {
+    if (e?.preventDefault) e.preventDefault();
+    const accessCode = joinCode.trim();
+    if (!accessCode) {
+      setMessage("Unesi šifru grupe.");
+      return;
+    }
+
+    setJoining(true);
     try {
-      await joinGroup(joinCode);
-      setMessage("Uspešno ste ušli u grupu!");
+      const result = await joinGroup(accessCode);
+      setMessage(result?.message || "Uspešno ste ušli u grupu!");
       setJoinCode("");
-      loadTopics(); // Osveži teme da vidimo sadržaj nove grupe
+      await refreshUser();
+      await loadTopics(); // Osveži teme da vidimo sadržaj grupe
     } catch (error) {
-      setMessage("Greška: " + (error.response?.data?.detail || "Pogrešna šifra"));
+      const detail = error?.response?.data?.detail;
+      const detailText = Array.isArray(detail)
+        ? detail.map((item) => item?.msg || JSON.stringify(item)).join(", ")
+        : detail;
+      setMessage("Greška: " + (detailText || error.message || "Pogrešna šifra"));
+    } finally {
+      setJoining(false);
     }
   };
 
@@ -72,7 +88,9 @@ function Home() {
         
         {/* header */}
         <div className="bg-white p-6 rounded-xl shadow mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Dobrodošli, {user?.walletAddress?.substring(0,10)}...</h1>
+          <h1 className="text-2xl font-bold text-gray-800">
+            Povezan MetaMask nalog: {walletAccount ? `${walletAccount.substring(0, 10)}...` : "nije povezan"}
+          </h1>
           {message && <p className="mt-2 p-2 bg-blue-100 text-blue-800 rounded">{message}</p>}
         </div>
 
@@ -81,24 +99,29 @@ function Home() {
           {/* Akcije (Create, Join & Predlozi)*/}
           <div className="space-y-6">
             {/* Kartica za kreiranje grupe */}
-            <CreateGroup />
+            {user?.uloga !== "Admin" && <CreateGroup />}
 
             {/* Kartica za ulazak u grupu */}
             <div className="bg-white p-5 rounded-xl shadow">
               <h3 className="font-semibold mb-3">Pristupi Grupi</h3>
-              <input 
-                type="text" 
-                placeholder="Unesi šifru grupe" 
-                className="w-full border p-2 rounded mb-2"
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value)}
-              />
-              <button 
-                onClick={handleJoinGroup}
-                className="w-full bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700 transition"
-              >
-                Uđi u grupu
-              </button>
+              <form onSubmit={handleJoinGroup}>
+                <input 
+                  type="text" 
+                  placeholder="Unesi šifru grupe" 
+                  className="w-full border p-2 rounded mb-2"
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value)}
+                />
+                <button 
+                  type="submit"
+                  disabled={joining}
+                  className={`w-full text-white py-2 rounded transition ${
+                    joining ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
+                  }`}
+                >
+                  {joining ? "Učitavanje..." : "Uđi u grupu"}
+                </button>
+              </form>
             </div>
 
             {/* Kartica za novu temu */}
@@ -129,6 +152,9 @@ function Home() {
 
           {/* Lista tema */}
           <div className="md:col-span-2 space-y-4">
+            <div className="bg-white p-3 rounded-xl shadow text-sm text-gray-700">
+              Grupa: <span className="font-semibold">{user?.groupName || "Niste u grupi"}</span>
+            </div>
             <h2 className="text-xl font-bold text-gray-700">Aktuelne Teme</h2>
             
             {loading ? (

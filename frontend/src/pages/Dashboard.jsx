@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import { getTopics, updateTopicStatus } from "../services/apiClient";
 import { useAuth } from "../context/AuthContext"; 
+import { connectWallet } from "../services/web3";
+import { createTopic as createTopicOnChain } from "../services/contractServise";
+import { uploadTopicMetadata } from "../services/ipfsService";
 
 function Dashboard() {
-  // eslint-disable-next-line no-unused-vars
   const { user } = useAuth();
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [approvingTopicId, setApprovingTopicId] = useState(null);
+  const [message, setMessage] = useState("");
 
   // Učitavanje tema sa backenda
   const loadTopics = async () => {
@@ -30,13 +34,60 @@ function Dashboard() {
   }, []);
 
   // Funkcija za odobravanje (Pending u Active)
-  const handleApprove = async (temaID) => {
+  const handleApprove = async (topic) => {
     if(!window.confirm("Da li ste sigurni da želite da odobrite ovu temu?")) return;
+    if (!topic.contract_address) {
+      alert("Tema nema adresu grupnog ugovora. Proveri da li je grupa povezana sa blockchain ugovorom.");
+      return;
+    }
+
     try {
-      await updateTopicStatus(temaID, "active");
-      loadTopics(); // Osveži listu
+      setApprovingTopicId(topic.id);
+      setMessage("");
+
+      const account = await connectWallet();
+      if (!account) {
+        throw new Error("MetaMask nalog nije povezan");
+      }
+
+      const loggedWallet = user?.walletAddress?.toLowerCase();
+      if (loggedWallet && loggedWallet !== account.toLowerCase()) {
+        throw new Error("Poveži isti MetaMask nalog kojim si ulogovan kao admin");
+      }
+
+      const token = sessionStorage.getItem("voting_token");
+      if (!token) {
+        throw new Error("Nedostaje sesija. Prijavi se ponovo.");
+      }
+
+      const ipfsHash = await uploadTopicMetadata(
+        {
+          title: topic.title || `Tema #${topic.id}`,
+          description: topic.description || "",
+        },
+        token
+      );
+
+      const { txHash, topicId } = await createTopicOnChain(
+        topic.contract_address,
+        ipfsHash,
+        account
+      );
+
+      await updateTopicStatus(topic.id, "active", {
+        on_chain_topic_id: Number.isInteger(topicId) ? topicId : null,
+        contract_address: topic.contract_address,
+        ipfs_hash: ipfsHash,
+      });
+
+      setMessage(`Tema odobrena on-chain. Tx: ${txHash?.slice(0, 12)}...`);
+      await loadTopics(); // Osveži listu
     } catch (err) {
-      alert("Greška: " + err.response?.data?.detail);
+      const detail = err?.response?.data?.detail || err?.message || "Nepoznata greška";
+      alert("Greška: " + detail);
+      setMessage(`Greška: ${detail}`);
+    } finally {
+      setApprovingTopicId(null);
     }
   };
 
@@ -54,6 +105,11 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       <h2 className="text-3xl font-bold text-center mb-6 text-gray-800">Admin Dashboard</h2>
+      {message && (
+        <div className="max-w-4xl mx-auto mb-4 rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-800">
+          {message}
+        </div>
+      )}
 
     
       {/* Tabela sa temama */}
@@ -115,10 +171,15 @@ function Dashboard() {
                   {t.status === "pending" && (
                     <>
                       <button 
-                        onClick={() => handleApprove(t.id)} 
-                        className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm transition"
+                        onClick={() => handleApprove(t)}
+                        disabled={approvingTopicId === t.id}
+                        className={`text-white px-3 py-1 rounded text-sm transition ${
+                          approvingTopicId === t.id
+                            ? "bg-green-300 cursor-not-allowed"
+                            : "bg-green-500 hover:bg-green-600"
+                        }`}
                       >
-                        Odobri
+                        {approvingTopicId === t.id ? "Odobravam..." : "Odobri"}
                       </button>      
                     </>
                   )}

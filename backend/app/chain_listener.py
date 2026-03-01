@@ -18,6 +18,8 @@ class ChainListener:
         self.initial_lookback = int(os.getenv("LISTENER_INITIAL_LOOKBACK", 10000))
         self.factory_last_synced_block = None
         self.group_last_synced_blocks = {}
+        self.sync_group_events_enabled = os.getenv("LISTENER_SYNC_GROUP_EVENTS", "false").lower() in ("1", "true", "yes")
+        self.max_groups_per_cycle = int(os.getenv("LISTENER_MAX_GROUPS_PER_CYCLE", 3))
     
     def start(self):
         self.is_running = True
@@ -303,8 +305,12 @@ class ChainListener:
         logger.info("Syncing GroupFactory events...")
         self.sync_group_created_events(db)
 
+        if not self.sync_group_events_enabled:
+            logger.debug("Skipping group event sync (LISTENER_SYNC_GROUP_EVENTS=false)")
+            return
+
         groups = db.query(models.Group).filter(models.Group.contract_address.isnot(None)).all()
-        for group in groups:
+        for group in groups[: self.max_groups_per_cycle]:
             logger.info(f"Syncing events for group: {group.contract_address}")
             self.sync_group_events(db, group.contract_address)
 
