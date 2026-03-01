@@ -12,35 +12,38 @@ class IPFSClient:
         self.api_key = os.getenv('PINATA_API_KEY')
         self.api_secret = os.getenv('PINATA_API_SECRET')
         self.jwt = os.getenv('PINATA_JWT')
-        self.gateway_url = self._normalize_gateway_url(
-            os.getenv('IPFS_GATEWAY_URL', 'https://gateway.pinata.cloud/ipfs/')
-        )
+        self.api_url = os.getenv('IPFS_API_URL')
+        self.gateway_url = os.getenv('IPFS_GATEWAY_URL')
+        
         self.last_error: Optional[str] = None
         
         has_key_secret = bool(self.api_key and self.api_secret)
-        if not self.jwt and not has_key_secret:
+        has_auth = bool(self.jwt) or has_key_secret
+        has_api_url = bool(self.api_url)
+
+        if not has_auth:
             logger.warning("Pinata credentials not configured. IPFS uploads will not work.")
+        if not has_api_url:
+            logger.warning("IPFS_API_URL not configured. IPFS uploads will not work.")
+        if not self.gateway_url:
+            logger.warning("IPFS_GATEWAY_URL not configured. IPFS reads will not work.")
+
+        if not has_auth or not has_api_url:
             self.configured = False
         else:
             self.configured = True
 
-    @staticmethod
-    def _normalize_gateway_url(raw_url: str) -> str:
-        url = (raw_url or "").strip()
-        if not url:
-            return "https://gateway.pinata.cloud/ipfs/"
-        if not (url.startswith("http://") or url.startswith("https://")):
-            url = f"https://{url}"
-        url = url.rstrip("/")
-        if not url.lower().endswith("/ipfs"):
-            url = f"{url}/ipfs"
-        return f"{url}/"
-    
+
     def upload_json(self, data: Dict[str, Any], name: str = "data") -> Optional[str]:
         self.last_error = None
 
         if not self.configured:
-            self.last_error = "Pinata credentials are missing (set PINATA_JWT or PINATA_API_KEY + PINATA_API_SECRET)."
+            missing = []
+            if not self.api_url:
+                missing.append("IPFS_API_URL")
+            if not self.jwt and not (self.api_key and self.api_secret):
+                missing.append("PINATA_JWT or PINATA_API_KEY + PINATA_API_SECRET")
+            self.last_error = f"IPFS is not configured. Missing: {', '.join(missing)}"
             logger.warning("IPFS not configured - returning None for hash")
             return None
         
@@ -60,7 +63,7 @@ class IPFSClient:
 
             # Make request to Pinata
             response = requests.post(
-                'https://api.pinata.cloud/pinning/pinJSONToIPFS',
+                self.api_url,
                 json=payload,
                 headers=headers,
                 timeout=30
@@ -100,6 +103,9 @@ class IPFSClient:
     def get_json(self, ipfs_hash: str) -> Optional[Dict[str, Any]]:
         
         try:
+            if not self.gateway_url:
+                logger.error("Cannot read IPFS metadata: IPFS_GATEWAY_URL is not configured")
+                return None
             url = f"{self.gateway_url}{ipfs_hash}"
             response = requests.get(url, timeout=10)
             
@@ -117,6 +123,8 @@ class IPFSClient:
             return None
     
     def get_file_url(self, ipfs_hash: str) -> str:
+        if not self.gateway_url:
+            raise RuntimeError("IPFS_GATEWAY_URL is not configured")
         return f"{self.gateway_url}{ipfs_hash}"
 
 

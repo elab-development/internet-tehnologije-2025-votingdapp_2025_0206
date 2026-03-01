@@ -1,21 +1,12 @@
-const API_URL = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000";
+const API_URL = process.env.REACT_APP_API_URL;
+const IPFS_GATEWAY_URL = process.env.REACT_APP_IPFS_GATEWAY_URL;
 
-const normalizeGatewayUrl = (rawUrl) => {
-  let url = (rawUrl || "").trim();
-  if (!url) {
-    return REACT_APP_IPFS_GATEWAY_URL;
-  }
-  if (!/^https?:\/\//i.test(url)) {
-    url = `https://${url}`;
-  }
-  url = url.replace(/\/+$/, "");
-  if (!/\/ipfs$/i.test(url)) {
-    url = `${url}/ipfs`;
-  }
-  return `${url}/`;
-};
-
-
+if (!API_URL) {
+  throw new Error("REACT_APP_API_URL is not configured");
+}
+if (!IPFS_GATEWAY_URL) {
+  throw new Error("REACT_APP_IPFS_GATEWAY_URL is not configured");
+}
 
 
 export const uploadTopicMetadata = async (data, token) => {
