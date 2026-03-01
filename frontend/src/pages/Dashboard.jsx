@@ -3,6 +3,7 @@ import { getTopics, updateTopicStatus } from "../services/apiClient";
 import { useAuth } from "../context/AuthContext"; 
 
 function Dashboard() {
+  // eslint-disable-next-line no-unused-vars
   const { user } = useAuth();
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -1,7 +1,11 @@
 import { useState } from "react";
-import apiClient from "../services/apiClient"; // most sa backendom
+import apiClient from "../services/apiClient"; // backend calls
+import { connectWallet } from "../services/web3";
+import { createGroupOnBlockchain } from "../services/contractServise";
+import { useAuth } from "../context/AuthContext";
 
 function CreateGroup() {
+  const { refreshUser } = useAuth();
   const [name, setName] = useState("");
   const [accessCode, setAccessCode] = useState("");
   const [message, setMessage] = useState("");
@@ -21,21 +25,40 @@ function CreateGroup() {
     setLoading(true);
 
     try {
-      // Šaljemo podatke na Backend
-      // apiClient automatski dodaje tvoj Admin Token u header
-      await apiClient.post("/groups", {
+      // prvo povezivanje novog naloga
+      const account = await connectWallet();
+      if (!account) throw new Error("Morate povezati MetaMask");
+
+      // kreiraj ugovor na lancu (MetaMask signature + tx)
+      const { txHash, groupAddress } = await createGroupOnBlockchain(account);
+
+      // zatim obavesti backend; backend čita receipt i upisuje tačnu on-chain adresu
+      const response = await apiClient.post("/groups", {
         name: name,
-        access_code: accessCode
+        access_code: accessCode,
+        transaction_hash: txHash
       });
 
-      setMessage(`Uspeh! Grupa "${name}" je kreirana.`);
+      const savedContractAddress = response.data?.contract_address || groupAddress;
+      if (savedContractAddress) {
+        setMessage(`Uspeh! Grupa "${name}" je kreirana na ${savedContractAddress}`);
+      } else {
+        setMessage(`Grupa "${name}" je sačuvana. Contract adresa će se dopuniti nakon blockchain sync-a.`);
+      }
+
+      await refreshUser();
       setName("");
       setAccessCode("");
       
     } catch (error) {
       setIsError(true);
-      // Prikazujemo poruku koju je Backend poslao (npr. "Grupa već postoji")
-      setMessage(error.response?.data?.detail || "Došlo je do greške pri kreiranju.");
+      // Prikazujemo backend detalj, ili JS grešku (MetaMask/env), pa tek onda fallback poruku
+      const detailedMessage =
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Došlo je do greške pri kreiranju.";
+      setMessage(detailedMessage);
     } finally {
       setLoading(false);
     }

@@ -19,7 +19,7 @@ export const createGroupOnBlockchain = async (accountAddress) => {
     
     const factoryAddress = process.env.REACT_APP_GROUP_FACTORY_CONTRACT_ADDRESS;
     if (!factoryAddress) {
-      throw new Error("GROUP_FACTORY_CONTRACT_ADDRESS not configured");
+      throw new Error("REACT_APP_GROUP_FACTORY_CONTRACT_ADDRESS is not configured");
     }
     
     const factory = new web3.eth.Contract(groupFactoryABI.abi, factoryAddress);
@@ -34,11 +34,19 @@ export const createGroupOnBlockchain = async (accountAddress) => {
       data
     );
     
-    // Wait for confirmation
-    const receipt = await waitForTransactionConfirmation(txHash);
-    
-    // Parse the logs to get the new group address
-    const groupAddress = parseGroupCreatedEvent(factory, receipt);
+    let groupAddress = null;
+    let receipt = null;
+    // Receipt parsing is best-effort; backend still verifies txHash and can keep pending row.
+    try {
+      receipt = await waitForTransactionConfirmation(txHash);
+      try {
+        groupAddress = parseGroupCreatedEvent(factory, receipt);
+      } catch (parseError) {
+        console.warn("GroupCreated parse warning:", parseError);
+      }
+    } catch (confirmationError) {
+      console.warn("Receipt wait warning:", confirmationError);
+    }
     
     return {
       txHash,
@@ -246,11 +254,38 @@ export const hasVoted = async (groupAddress, topicId, voterAddress) => {
 };
 
 const parseGroupCreatedEvent = (factory, receipt) => {
-  const events = factory.events.GroupCreated.parse(receipt.logs);
-  if (events.length > 0) {
-    return events[0].returnValues.groupAddress;
+  if (!receipt || !receipt.logs) {
+    throw new Error("Missing transaction receipt logs");
   }
-  throw new Error("GroupCreated event not found in transaction receipt");
+
+  // Try contract helper first (works in some web3 versions)
+  if (factory?.events?.GroupCreated?.parse) {
+    const events = factory.events.GroupCreated.parse(receipt.logs);
+    if (events.length > 0) {
+      return events[0].returnValues.groupAddress;
+    }
+  }
+
+  // Fallback: decode raw logs manually
+  const eventSignature = web3.eth.abi.encodeEventSignature("GroupCreated(address,address)");
+  const eventLog = receipt.logs.find(
+    (log) => Array.isArray(log.topics) && log.topics[0] === eventSignature
+  );
+
+  if (!eventLog) {
+    throw new Error("GroupCreated event not found in transaction receipt");
+  }
+
+  const decoded = web3.eth.abi.decodeLog(
+    [
+      { type: "address", name: "groupAddress", indexed: false },
+      { type: "address", name: "admin", indexed: false },
+    ],
+    eventLog.data,
+    eventLog.topics.slice(1)
+  );
+
+  return decoded.groupAddress;
 };
 
 const parseTopicCreatedEvent = (group, receipt) => {

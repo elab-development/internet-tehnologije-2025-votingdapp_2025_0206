@@ -60,5 +60,4 @@ uvicorn==0.40.0
 web3==7.14.1
 websockets==15.0.1
 yarl==1.22.0
-ipfshttpclient==0.8.0
-pinata-sdk==0.3.1
+

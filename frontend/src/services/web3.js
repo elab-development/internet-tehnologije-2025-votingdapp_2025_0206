@@ -91,7 +91,17 @@ export const waitForTransactionConfirmation = async (txHash, confirmations = 1) 
   let attempts = 0;
 
   while (confirmationCount < confirmations && attempts < maxAttempts) {
-    receipt = await web3.eth.getTransactionReceipt(txHash);
+    try {
+      receipt = await web3.eth.getTransactionReceipt(txHash);
+    } catch (error) {
+      const msg = (error?.message || "").toLowerCase();
+      // Some providers temporarily return "transaction not found" right after broadcast.
+      if (msg.includes("transaction not found") || msg.includes("not found")) {
+        receipt = null;
+      } else {
+        throw error;
+      }
+    }
     
     if (receipt) {
       confirmationCount++;

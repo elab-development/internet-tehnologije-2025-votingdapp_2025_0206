@@ -4,6 +4,7 @@ from sqlalchemy import func
 from . import models, schemas, database, security
 from .ipfs_service import upload_topic_metadata
 from .chain_listener import run_event_listener_loop
+from .contract_service import get_contract_service
 import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -83,16 +84,11 @@ def login(login_data: schemas.UserLogin, db: Session = Depends(database.get_db))
         print(f"Greška: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Endpoint koji vraća informacije o trenutno ulogovanom korisniku.
-# Može se koristiti na klijentu za osvežavanje role/tokena nakon
-# što je uloga promenjena na serveru.
 @app.get("/me", response_model=schemas.UserDisplay)
 def read_current_user(
     current_user: dict = Depends(security.get_current_user),
     db: Session = Depends(database.get_db)
 ):
-    # Uzimamo najnovije podatke iz baze, tako da role koje su promenjene
-    # spolja budu odmah vidljive.
     user = db.query(models.User).filter(
         func.lower(models.User.wallet_address) == current_user["wallet_address"].lower()
     ).first()
@@ -107,26 +103,96 @@ def create_group(
 ):
     print(f"Zahtev od: {current_user['wallet_address']} sa ulogom {current_user['role']}")
 
-    # Provera korisnika ADMIN?
-    if current_user["role"].lower() != "admin":
-        raise HTTPException(status_code=403, detail="Samo admin može da pravi grupe!")
-
     # Da li grupa već postoji? (Po imenu ili šifri)
     existing_group = db.query(models.Group).filter((models.Group.name == group.name) | (models.Group.access_code == group.access_code)).first()
     
     if existing_group:
         raise HTTPException(status_code=400, detail="Grupa sa tim imenom ili šifrom već postoji")
 
+    admin_wallet = current_user["wallet_address"].lower()
+    user = db.query(models.User).filter(
+        func.lower(models.User.wallet_address) == admin_wallet
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Korisnik nije pronađen")
+
+    resolved_contract_address = group.contract_address.lower() if group.contract_address else None
+    if group.transaction_hash:
+        try:
+            event_data = get_contract_service().resolve_group_from_creation_tx(group.transaction_hash)
+            chain_group_address = event_data["group_address"].lower()
+            chain_admin_address = event_data["admin_address"].lower()
+        except ValueError as e:
+            detail = str(e)
+            lowered = detail.lower()
+
+            # If receipt is not available yet or RPC is throttled, keep user's metadata
+            # and let chain listener attach contract address once event is seen.
+            if (
+                "receipt not found" in lowered
+                or "rate limited" in lowered
+                or "too many requests" in lowered
+                or "transaction not found" in lowered
+            ):
+                user.role = models.UserRole.ADMIN
+                pending_group = models.Group(
+                    name=group.name,
+                    access_code=group.access_code,
+                    admin_wallet=admin_wallet,
+                    contract_address=None
+                )
+                db.add(pending_group)
+                db.commit()
+                db.refresh(pending_group)
+                return pending_group
+
+            raise HTTPException(status_code=400, detail=detail)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to verify blockchain transaction: {e}")
+
+        if chain_admin_address != admin_wallet:
+            raise HTTPException(
+                status_code=403,
+                detail="Transaction admin does not match authenticated user"
+            )
+
+        if (
+            group.contract_address
+            and group.contract_address.lower() != chain_group_address.lower()
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Provided contract_address does not match transaction result"
+            )
+
+        resolved_contract_address = chain_group_address
+
+    if not resolved_contract_address:
+        raise HTTPException(
+            status_code=400,
+            detail="contract_address or transaction_hash is required"
+        )
+
+    existing_contract = db.query(models.Group).filter(
+        func.lower(models.Group.contract_address) == resolved_contract_address.lower()
+    ).first()
+    if existing_contract:
+        raise HTTPException(status_code=400, detail="Grupa za ovaj smart contract već postoji")
+
     # Kad zavrsi, upisuju se u bazu
+    user.role = models.UserRole.ADMIN
     new_group = models.Group(
         name=group.name,
         access_code=group.access_code,
-        admin_wallet=current_user["wallet_address"]
+        admin_wallet=admin_wallet,
+        contract_address=resolved_contract_address
     )
     
     db.add(new_group)
     db.commit()
     db.refresh(new_group)
+    
+    return new_group
 
 
 # Ruta za pridruzivanje grupi
@@ -144,7 +210,9 @@ def join_group(
         raise HTTPException(status_code=400, detail="Već ste član jedne grupe!")
 
     # Nađi grupu po šifri
-    group = db.query(models.Group).filter(models.Group.access_code == join_data.access_code).first()
+    group = db.query(models.Group).filter(
+        func.lower(models.Group.access_code) == join_data.access_code.lower()
+    ).first()
     
     if not group:
         raise HTTPException(status_code=404, detail="Pogrešna šifra grupe!")
@@ -153,7 +221,8 @@ def join_group(
     user.group_id = group.id
     db.commit()
     
-    return {"message": f"Uspešno ste pristupili grupi: {group.name}"}
+    return {"message": f"Uspešno ste pristupili grupi: {group.name}",
+            "contract_address": group.contract_address}
 
 
 # Ruta za kreiranje teme
@@ -169,12 +238,16 @@ def create_topic(
     if not user.group_id:
         raise HTTPException(status_code=400, detail="Morate biti član grupe da biste predložili temu!")
 
+    # Count members in the group to set voters_count
+    voters_count = db.query(models.User).filter(models.User.group_id == user.group_id).count()
+
     # Kreiraj temu
     new_topic = models.Topic(
         title=topic.title,
         description=topic.description,
         status=models.TopicStatus.PENDING, # Po defaultu čeka odobrenje
-        group_id=user.group_id
+        group_id=user.group_id,
+        voters_count=voters_count
     )
     
     db.add(new_topic)
@@ -207,11 +280,16 @@ def get_topics(
 
     # Prebrojavanje glasova za svaku temu
     for topic in topics:
-        yes_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == "YES").count()
-        no_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == "NO").count()
-        abstain_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == "ABSTAIN").count()
+        yes_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == models.VoteOption.YES).count()
+        no_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == models.VoteOption.NO).count()
+        abstain_count = db.query(models.Vote).filter(models.Vote.topic_id == topic.id, models.Vote.decision == models.VoteOption.ABSTAIN).count()
         
-        # Pakujemo rezultate u rečnik koji schemas.Topic očekuje
+        # Update topic vote counts from database
+        topic.votes_yes = yes_count
+        topic.votes_no = no_count
+        topic.votes_abstain = abstain_count
+        
+        # Pakujemo rezultate u rečnik koji schemas.Topic očekuje za backward compatibility
         topic.results = {
             "yes": yes_count,
             "no": no_count,
@@ -285,9 +363,15 @@ def cast_vote(
     if existing_vote:
         raise HTTPException(status_code=400, detail="Već ste glasali na ovu temu!")
 
+    # Map string decision to enum
+    try:
+        vote_option = models.VoteOption[vote.decision.upper()]
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Nevažeća odluka. Koristi: YES, NO, ABSTAIN")
+
     # Na kraju upisi glas
     new_vote = models.Vote(
-        decision=vote.decision,
+        decision=vote_option,
         user_id=user.id,
         topic_id=topic.id
     )

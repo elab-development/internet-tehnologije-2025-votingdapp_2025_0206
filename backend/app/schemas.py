@@ -26,16 +26,17 @@ class UserDisplay(BaseModel):
     id: int
     wallet_address: str
     role: UserRole
-    memberships: list[Membership] = []
+    group_id: Optional[int] = None
 
-    # Direktno ucitavanje podataka iz AlchemySQL-a baze
     class Config:
         from_attributes = True
         
-# Šta frontend šalje (samo ime i šifru)
+# Šta frontend šalje (samo ime, šifru i eventualno adresu ugovora)
 class GroupCreate(BaseModel):
     name: str
     access_code: str
+    contract_address: Optional[str] = None
+    transaction_hash: Optional[str] = None
 
 # Šta backend vraća (celu grupu sa ID-jem i ko je napravio)
 class Group(BaseModel):
@@ -44,7 +45,6 @@ class Group(BaseModel):
     access_code: str
     admin_wallet: str
     contract_address: Optional[str] = None
-    factory_address: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -75,6 +75,12 @@ class Topic(BaseModel):
     status: str
     created_at: datetime
     group_id: int
+    votes_yes: int = 0
+    votes_no: int = 0
+    votes_abstain: int = 0
+    voters_count: int = 0
+    finalized: bool = False
+    result: Optional[int] = None
     results: Optional[TopicResults] = None 
 
     class Config:

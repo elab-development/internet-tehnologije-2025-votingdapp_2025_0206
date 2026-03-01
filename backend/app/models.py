@@ -28,19 +28,19 @@ class TopicStatus(enum.Enum):
 
 # Tabele
 
-# Membership table connects users and groups with a per-group role
-class Membership(Base):
-    __tablename__ = "memberships"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
-    role = Column(Enum(UserRole), default=UserRole.USER)
-
-    user = relationship("User", back_populates="memberships")
-    group = relationship("Group", back_populates="memberships")
-
-    __table_args__ = (UniqueConstraint("user_id", "group_id"),)
+# class Membership(Base):
+#     __tablename__ = "memberships"
+#
+#     id = Column(Integer, primary_key=True, index=True)
+#     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+#     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+#     role = Column(Enum(UserRole), default=UserRole.USER)
+#
+#     user = relationship("User", back_populates="memberships")
+#     group = relationship("Group", back_populates="memberships")
+#
+#     __table_args__ = (UniqueConstraint("user_id", "group_id"),)
 
 # Korisnik
 class User(Base):
@@ -49,10 +49,9 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     wallet_address = Column(String, unique=True, index=True, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.USER)
-    # *no* longer storing a single group_id; memberships table handles many-to-many
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
 
     # Relacije
-    memberships = relationship("Membership", back_populates="user")
     votes = relationship("Vote", back_populates="user")
 
 
@@ -64,11 +63,9 @@ class Group(Base):
     name = Column(String, unique=True)
     access_code = Column(String, unique=True)
     admin_wallet = Column(String, nullable=False)
-    contract_address = Column(String, unique=True, nullable=True)  # deployed Group contract
-    factory_address = Column(String, nullable=True)               # optional factory
+    contract_address = Column(String, unique=True, nullable=True)
 
     # Relacije
-    memberships = relationship("Membership", back_populates="group")
     topics = relationship("Topic", back_populates="group")
 
 # Tema
@@ -85,6 +82,13 @@ class Topic(Base):
     status = Column(Enum(TopicStatus), default=TopicStatus.PENDING)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     group_id = Column(Integer, ForeignKey("groups.id"))
+    
+    votes_yes = Column(Integer, default=0)
+    votes_no = Column(Integer, default=0)
+    votes_abstain = Column(Integer, default=0)
+    voters_count = Column(Integer, default=0)  # Total eligible voters at time of creation
+    finalized = Column(Boolean, default=False)
+    result = Column(Integer, nullable=True)  # 0=YES, 1=NO, 2=ABSTAIN (majority cannot be reached)
     
     # Relacije
     group = relationship("Group", back_populates="topics")

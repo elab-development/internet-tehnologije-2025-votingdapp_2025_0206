@@ -26,7 +26,7 @@ function Login() {
       const signer = await provider.getSigner();
       const walletAddress = await signer.getAddress();
 
-      // Potpisivanje poruke (ista kao i u backendu)
+      // Potpisivanje poruke
       const message = "Login to Voting Dapp";
       const signature = await signer.signMessage(message);
 
@@ -38,7 +38,7 @@ function Login() {
 
       // Backend vraca token
       const token = response.data.access_token;
-      login(token); 
+      await login(token); 
 
       // Preusmeravanje
       // Ako je admin - Dashboard, ako ne - Home
