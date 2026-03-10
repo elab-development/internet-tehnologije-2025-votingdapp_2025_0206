@@ -208,7 +208,7 @@ function Home() {
                 <p className="text-sm">Ili niste u grupi, ili nema aktivnih tema.</p>
               </div>
             ) : (
-              topics.map((topic) => (
+              topics.filter(topic => topic.status !== "closed").map((topic) => (
                 <div key={topic.id} className="bg-white p-5 rounded-xl shadow border-l-4 border-indigo-500">
                   <div className="flex justify-between items-start">
                     <h3 className="text-lg font-bold">{topic.title}</h3>
