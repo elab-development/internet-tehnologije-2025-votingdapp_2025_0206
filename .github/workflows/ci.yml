@@ -1,0 +1,65 @@
+name: Voting DApp CI/CD Testovi
+
+# Pokreće se svaki put kada pošalješ kod (push) ili napraviš Pull Request
+on:
+  push:
+    branches: [ "main", "master", "automation_test" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  # Testiranje backenda
+  backend-testovi:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Podesi Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instaliraj zavisnosti
+        run: |
+          pip install -r requirements.txt
+          pip install pytest httpx
+      - name: Pokreni Pytest
+        env:
+          DATABASE_URL: "sqlite:///./testbaza.db"
+          SECRET_KEY: "super_tajna_šifra_za_testiranje" 
+        run: pytest
+
+  # Testiranje blockchaina
+  blockchain-testovi:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./blockchain
+    steps:
+      - uses: actions/checkout@v4
+      - name: Podesi Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instaliraj zavisnosti
+        run: npm install
+      - name: Pokreni Hardhat testove
+        run: npx hardhat test
+
+  # Testiranje fronta
+  frontend-testovi:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Podesi Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instaliraj zavisnosti
+        run: npm install
+      - name: Pokreni Jest testove (CI mod)
+        run: CI=true npm test
