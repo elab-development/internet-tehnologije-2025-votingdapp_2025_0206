@@ -3,7 +3,7 @@ name: Voting DApp CI/CD Testovi
 # Pokreće se svaki put kada pošalješ kod (push) ili napraviš Pull Request
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "automation_test" ]
   pull_request:
     branches: [ "main", "master" ]
 
