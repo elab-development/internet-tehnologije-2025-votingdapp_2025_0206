@@ -25,6 +25,9 @@ jobs:
           pip install -r requirements.txt
           pip install pytest httpx
       - name: Pokreni Pytest
+        env:
+          DATABASE_URL: "sqlite:///./testbaza.db"
+          SECRET_KEY: "super_tajna_šifra_za_testiranje" 
         run: pytest
 
   # Testiranje blockchaina
